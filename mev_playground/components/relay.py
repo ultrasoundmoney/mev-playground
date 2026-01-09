@@ -93,9 +93,9 @@ class UltrasoundRelayComponent(Component):
             "DENEB_FORK_VERSION": DENEB_FORK_VERSION,
             "DENEB_FORK_EPOCH": "0",
             "ELECTRA_FORK_VERSION": ELECTRA_FORK_VERSION,
-            "ELECTRA_FORK_EPOCH": "2000",  # Far future
+            "ELECTRA_FORK_EPOCH": "0",  # Electra from genesis
             "FULU_FORK_VERSION": FULU_FORK_VERSION,
-            "FULU_FORK_EPOCH": "99999",  # Far future
+            "FULU_FORK_EPOCH": "18446744073709551615",  # Far future (max uint64)
 
             # Telegram (disabled)
             "TELEGRAM_API_KEY": "",

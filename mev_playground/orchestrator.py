@@ -14,6 +14,8 @@ from mev_playground.artifacts import (
     generate_jwt_secret,
     generate_el_genesis,
     generate_beacon_genesis,
+    get_genesis_timestamp,
+    get_genesis_validators_root,
 )
 from mev_playground.artifacts.keys import get_validator_keys, write_validator_files
 from mev_playground.components.reth import RethComponent
@@ -124,15 +126,12 @@ class Playground:
             self.config.consensus.image,
             self.config.mev.boost.image,
             "pk910/dora-the-explorer:latest",
+            self.config.mev.relay.image,
+            "redis:7-alpine",
+            "postgres:15-alpine",
         ]
-        # Relay/builder components disabled for now
-        # images.extend([
-        #     self.config.mev.relay.image,
-        #     "redis:7-alpine",
-        #     "postgres:15-alpine",
-        # ])
-        # if self.config.mev.builder.enabled:
-        #     images.append(self.config.mev.builder.image)
+        if self.config.mev.builder.enabled:
+            images.append(self.config.mev.builder.image)
         return images
 
     def _create_components(self) -> None:
@@ -152,24 +151,24 @@ class Playground:
         # Block explorer
         self._components["dora"] = DoraComponent(data_dir)
 
-        # Relay infrastructure - disabled for now
-        # self._components["redis"] = RedisComponent(data_dir)
-        # mevdb, localdb, globaldb = create_relay_databases(data_dir)
-        # self._components["mevdb"] = mevdb
-        # self._components["localdb"] = localdb
-        # self._components["globaldb"] = globaldb
+        # Relay infrastructure
+        self._components["redis"] = RedisComponent(data_dir)
+        mevdb, localdb, globaldb = create_relay_databases(data_dir)
+        self._components["mevdb"] = mevdb
+        self._components["localdb"] = localdb
+        self._components["globaldb"] = globaldb
 
-        # Relay - disabled for now
-        # self._components["mev-ultrasound-relay"] = UltrasoundRelayComponent(
-        #     data_dir,
-        #     self.config,
-        #     self._genesis_timestamp,
-        #     self._genesis_validators_root,
-        # )
+        # Relay
+        self._components["mev-ultrasound-relay"] = UltrasoundRelayComponent(
+            data_dir,
+            self.config,
+            get_genesis_timestamp(),
+            get_genesis_validators_root(),
+        )
 
-        # Builder - disabled for now
-        # if self.config.mev.builder.enabled and self.config.mev.builder.type == "rbuilder":
-        #     self._components["rbuilder"] = RbuilderComponent(data_dir, self.config)
+        # Builder
+        if self.config.mev.builder.enabled and self.config.mev.builder.type == "rbuilder":
+            self._components["rbuilder"] = RbuilderComponent(data_dir, self.config)
 
     def start(self) -> None:
         """Start all playground components."""
@@ -206,14 +205,15 @@ class Playground:
             "lighthouse-vc",
             # Tools
             "dora",
-            # Relay infrastructure - disabled for now
-            # "redis",
-            # "mevdb",
-            # "localdb",
-            # "globaldb",
-            # "mev-ultrasound-relay",
-            # "rbuilder",
+            # Relay infrastructure
+            "redis",
+            "mevdb",
+            "localdb",
+            "globaldb",
+            "mev-ultrasound-relay",
         ]
+        if self.config.mev.builder.enabled:
+            startup_order.append("rbuilder")
 
         # Clean up any existing containers from previous runs
         console.print("Cleaning up existing containers...")
@@ -291,8 +291,7 @@ class Playground:
         console.print(f"  Lighthouse:       http://localhost:{3500}")
         console.print(f"  MEV-Boost:        http://localhost:{18550}")
         console.print(f"  Dora Explorer:    http://localhost:{8080}")
-        # Relay/builder disabled for now
-        # console.print(f"  Relay:            http://localhost:{80}")
-        # if "rbuilder" in self._components:
-        #     console.print(f"  rbuilder RPC:     http://localhost:{8645}")
+        console.print(f"  Relay:            http://localhost:{80}")
+        if "rbuilder" in self._components:
+            console.print(f"  rbuilder RPC:     http://localhost:{8645}")
         console.print("")

@@ -148,7 +148,6 @@ class LighthouseValidatorComponent(Component):
             "--suggested-fee-recipient", "0x0000000000000000000000000000000000000000",
             "--builder-proposals",
             "--prefer-builder-proposals",
-            "--builder-registration-timestamp-override", "0",
         ]
 
         return ContainerConfig(
