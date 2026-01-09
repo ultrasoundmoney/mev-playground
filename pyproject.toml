@@ -1,0 +1,25 @@
+[project]
+name = "mev-playground"
+version = "0.1.0"
+description = "Minimal MEV integration playground for testing Ethereum relay and builder"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "docker>=7.0.0",
+    "click>=8.0.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "eth-account>=0.11.0",
+    "py-ecc>=7.0.0",
+    "rich>=13.0.0",
+    "pycryptodome>=3.23.0",
+    "mnemonic>=0.21",
+    "eth2deposit>=0.2.1",
+]
+
+[project.scripts]
+mev-playground = "mev_playground.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
