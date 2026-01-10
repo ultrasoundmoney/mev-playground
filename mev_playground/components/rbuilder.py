@@ -19,10 +19,12 @@ class RbuilderComponent(Component):
         self,
         data_dir: Path,
         config: PlaygroundConfig,
+        reth_data_path: Path,
         coinbase_secret_key: str = "0x" + "01" * 32,  # Default test key
     ):
         super().__init__(data_dir)
         self.config = config
+        self.reth_data_path = reth_data_path
         self.coinbase_secret_key = coinbase_secret_key
         self._config_path = data_dir / "config" / "rbuilder.toml"
 
@@ -32,46 +34,40 @@ class RbuilderComponent(Component):
 
     def generate_config(self) -> str:
         """Generate rbuilder TOML configuration."""
-        config_content = f'''# rbuilder configuration for mev-playground
+        # Strip 0x prefix from keys if present (rbuilder expects raw hex)
+        coinbase_key = self.coinbase_secret_key
+        if coinbase_key.startswith("0x"):
+            coinbase_key = coinbase_key[2:]
+        relay_key = DEFAULT_MEV_SECRET_KEY
+        if relay_key.startswith("0x"):
+            relay_key = relay_key[2:]
 
-# Chain configuration
-chain = "holesky"
-
-# Consensus layer connection
+        # Note: [[relays]] table array must come AFTER all scalar values in TOML
+        config_content = f'''chain = "/genesis/genesis.json"
+reth_datadir = "/reth_data"
+el_node_ipc_path = "/reth_data/reth.ipc"
 cl_node_url = ["http://{StaticIPs.LIGHTHOUSE_BN}:{StaticPorts.LIGHTHOUSE_HTTP}"]
-
-# Relay configuration
 enabled_relays = ["ultrasound-local"]
+coinbase_secret_key = "{coinbase_key}"
+relay_secret_key = "{relay_key}"
+live_builders = ["mgp-ordering"]
+jsonrpc_server_port = {StaticPorts.RBUILDER_RPC}
+jsonrpc_server_ip = "0.0.0.0"
+log_level = "info,rbuilder=debug"
+log_json = false
+full_telemetry_server_port = 6060
+full_telemetry_server_ip = "0.0.0.0"
+root_hash_use_sparse_trie = true
+root_hash_compare_sparse_trie = false
+extra_data = "🦇🔊"
+slot_delta_to_start_bidding_ms = -12000
 
 [[relays]]
 name = "ultrasound-local"
 url = "http://{StaticIPs.RELAY}:{StaticPorts.RELAY_HTTP}"
-mode = "full"
 use_ssz_for_submit = false
 use_gzip_for_submit = false
 priority = 0
-
-# Builder configuration
-coinbase_secret_key = "{self.coinbase_secret_key}"
-relay_secret_key = "{DEFAULT_MEV_SECRET_KEY}"
-
-# Builders to run
-live_builders = ["mgp-ordering"]
-
-# JSON-RPC server for bundle submissions
-jsonrpc_server_port = {StaticPorts.RBUILDER_RPC}
-jsonrpc_server_ip = "0.0.0.0"
-
-# Logging
-log_level = "info,rbuilder=debug"
-log_json = false
-
-# Telemetry
-full_telemetry_server_port = 6060
-full_telemetry_server_ip = "0.0.0.0"
-
-# Note: reth_datadir and el_node_ipc_path need to be set based on
-# how rbuilder accesses reth (shared volume or IPC)
 '''
         return config_content
 
@@ -84,6 +80,9 @@ full_telemetry_server_ip = "0.0.0.0"
     def get_container_config(self) -> ContainerConfig:
         # Ensure config is written
         self.write_config()
+
+        # Get artifacts path for genesis.json
+        artifacts_path = self.data_dir / "artifacts"
 
         command = [
             "run",
@@ -112,19 +111,28 @@ full_telemetry_server_ip = "0.0.0.0"
                     type="bind",
                     read_only=True,
                 ),
+                # Mount Reth data directory for IPC and state access
+                Mount(
+                    target="/reth_data",
+                    source=str(self.reth_data_path),
+                    type="bind",
+                ),
+                # Mount artifacts for genesis.json
+                Mount(
+                    target="/genesis",
+                    source=str(artifacts_path),
+                    type="bind",
+                    read_only=True,
+                ),
             ],
             healthcheck={
-                "test": [
-                    "CMD-SHELL",
-                    # Use bash explicitly for /dev/tcp support
-                    f"bash -c 'echo >/dev/tcp/localhost/{StaticPorts.RBUILDER_RPC}' 2>/dev/null || exit 1",
-                ],
+                "test": ["NONE"],  # Distroless image has no shell; rely on container running
                 "interval": 10000000000,
                 "timeout": 5000000000,
                 "retries": 10,
-                "start_period": 30000000000,
+                "start_period": 60000000000,  # 60s start period for rbuilder to initialize
             },
-            depends_on=["mev-ultrasound-relay", "lighthouse-bn"],
+            depends_on=["reth", "mev-ultrasound-relay", "lighthouse-bn"],
         )
 
     @property

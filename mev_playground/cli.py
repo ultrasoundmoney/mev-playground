@@ -200,5 +200,37 @@ def info():
     console.print(f"  rbuilder:     {StaticIPs.RBUILDER}")
 
 
+@main.command()
+@click.option(
+    "--rate",
+    default=5,
+    help="Transactions per slot (default: 5)",
+)
+@click.option(
+    "--slots",
+    default=None,
+    type=int,
+    help="Number of slots to spam (default: infinite until Ctrl+C)",
+)
+@click.option(
+    "--rpc-url",
+    default="http://localhost:8545",
+    help="Reth RPC URL (default: http://localhost:8545)",
+)
+def spam(rate, slots, rpc_url):
+    """Send test transactions to populate the mempool.
+
+    Runs continuously until Ctrl+C unless --slots is specified.
+    """
+    from mev_playground.spammer import TransactionSpammer
+
+    try:
+        spammer = TransactionSpammer(rpc_url=rpc_url)
+        spammer.spam(tx_per_slot=rate, duration_slots=slots)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise click.Abort()
+
+
 if __name__ == "__main__":
     main()

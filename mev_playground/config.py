@@ -105,9 +105,9 @@ class RelayConfig(BaseModel):
 class BuilderConfig(BaseModel):
     """Builder configuration."""
 
-    enabled: bool = False  # Disabled by default - rbuilder needs special setup
+    enabled: bool = True  # Enabled by default with rbuilder
     type: str = "rbuilder"  # or "custom" or "none"
-    image: str = "reth-rbuilder:local"  # Local build for ARM64 support
+    image: str = "flashbots-rbuilder:local"  # Flashbots rbuilder
     extra_env: dict[str, str] = Field(default_factory=dict)
 
 

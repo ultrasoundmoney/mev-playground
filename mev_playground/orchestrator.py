@@ -168,7 +168,12 @@ class Playground:
 
         # Builder
         if self.config.mev.builder.enabled and self.config.mev.builder.type == "rbuilder":
-            self._components["rbuilder"] = RbuilderComponent(data_dir, self.config)
+            reth_component = self._components["reth"]
+            self._components["rbuilder"] = RbuilderComponent(
+                data_dir,
+                self.config,
+                reth_data_path=reth_component.data_path,
+            )
 
     def start(self) -> None:
         """Start all playground components."""

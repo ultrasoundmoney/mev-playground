@@ -65,13 +65,15 @@ class UltrasoundRelayComponent(Component):
             "LOG_JSON": "false",
             "RUST_LOG": "info",
 
-            # Devnet tuning
+            # Devnet tuning - skip block simulation since Reth doesn't have flashbots validation
             "TOP_BID_DEBOUNCE_MS_LOCAL": "2",
-            "SKIP_SIM_PROBABILITY": "1",
+            "SKIP_SIM_PROBABILITY": "1.0",
             "FORCED_TIMEOUT_MAX_BID_VALUE": "0",
-            "X_TIMEOUT_HEADER_CORRECTION": "0",
+            "X_TIMEOUT_HEADER_CORRECTION": "1500",  # Respond 1.5s before timeout to ensure delivery
             "ADJUSTMENT_LOOKBACK_MS": "50",
             "ADJUSTMENT_MIN_DELTA": "0",
+            "SKIP_SIMULATION": "true",
+            "DISABLE_BLOCK_SIMULATION": "true",
 
             # Feature flags
             "FF_ENABLE_TOP_BID_GOSSIP": "false",

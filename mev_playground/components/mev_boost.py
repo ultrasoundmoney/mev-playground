@@ -8,6 +8,7 @@ from mev_playground.config import (
     StaticPorts,
     PlaygroundConfig,
     DEFAULT_MEV_PUBKEY,
+    GENESIS_FORK_VERSION,
 )
 
 
@@ -30,7 +31,10 @@ class MEVBoostComponent(Component):
             "-addr", f"0.0.0.0:{StaticPorts.MEV_BOOST}",
             "-relay", relay_url,
             "-relay-check",
-            "-genesis-fork-version", "0x10000038",
+            "-genesis-fork-version", GENESIS_FORK_VERSION,
+            "-request-timeout-getheader", "2900",  # 2.9s timeout (lighthouse max is 3s)
+            "-request-timeout-getpayload", "4000",  # 4s timeout for getPayload
+            "-request-timeout-regval", "6000",  # 6s timeout for registerValidator
             "-loglevel", "debug",
         ]
 

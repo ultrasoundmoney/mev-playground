@@ -34,7 +34,7 @@ class RethComponent(Component):
             "--http",
             "--http.addr", "0.0.0.0",
             "--http.port", str(StaticPorts.RETH_HTTP),
-            "--http.api", "eth,net,web3,debug,trace,txpool,admin",
+            "--http.api", "all",
             "--http.corsdomain", "*",
             "--ws",
             "--ws.addr", "0.0.0.0",
@@ -46,10 +46,12 @@ class RethComponent(Component):
             "--metrics", f"0.0.0.0:{StaticPorts.RETH_METRICS}",
             "--log.stdout.format", "terminal",
             "--full",
-            "--ipcdisable",  # Disable IPC for now (can enable for rbuilder)
+            "--ipcpath", "/data/reth.ipc",  # IPC socket for rbuilder integration
             # Required for proper engine API payload building
             "--engine.persistence-threshold", "0",
             "--engine.memory-block-buffer-target", "0",
+            # Allow rbuilder to share database access
+            "--db.exclusive", "false",
         ]
 
         return ContainerConfig(
@@ -99,3 +101,8 @@ class RethComponent(Component):
     @property
     def auth_url(self) -> str:
         return f"http://{StaticIPs.RETH}:{StaticPorts.RETH_AUTH}"
+
+    @property
+    def data_path(self) -> Path:
+        """Path to Reth data directory on host."""
+        return self._data_path

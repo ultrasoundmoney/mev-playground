@@ -73,6 +73,7 @@ class LighthouseBeaconComponent(Component):
                 "--builder", f"http://{StaticIPs.MEV_BOOST}:{StaticPorts.MEV_BOOST}",
                 "--builder-fallback-epochs-since-finalization", "0",
                 "--builder-fallback-disable-checks",
+                "--builder-header-timeout", "3000",  # 3s max allowed by lighthouse
             ])
 
         return ContainerConfig(
