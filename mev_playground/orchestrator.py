@@ -29,6 +29,7 @@ from mev_playground.components.postgres import create_relay_databases
 from mev_playground.components.relay import UltrasoundRelayComponent
 from mev_playground.components.rbuilder import RbuilderComponent
 from mev_playground.components.dora import DoraComponent
+from mev_playground.components.contender import ContenderComponent
 
 
 console = Console()
@@ -44,6 +45,8 @@ class Playground:
         relay_image: Optional[str] = None,
         builder: str = "rbuilder",
         builder_image: Optional[str] = None,
+        with_contender: bool = False,
+        contender_tps: int = 20,
     ):
         """Initialize the playground.
 
@@ -53,8 +56,12 @@ class Playground:
             relay_image: Override relay image
             builder: Builder type ("rbuilder", "custom", or "none")
             builder_image: Custom builder image (if builder="custom")
+            with_contender: Start Contender tx spammer with the playground
+            contender_tps: Contender transactions per second
         """
         self.config = config or PlaygroundConfig()
+        self.with_contender = with_contender
+        self.contender_tps = contender_tps
 
         if data_dir:
             self.config.data_dir = data_dir
@@ -132,6 +139,8 @@ class Playground:
         ]
         if self.config.mev.builder.enabled:
             images.append(self.config.mev.builder.image)
+        if self.with_contender:
+            images.append(self.config.contender.image)
         return images
 
     def _create_components(self) -> None:
@@ -173,6 +182,15 @@ class Playground:
                 data_dir,
                 self.config,
                 reth_data_path=reth_component.data_path,
+            )
+
+        # Contender tx spammer
+        if self.with_contender:
+            self._components["contender"] = ContenderComponent(
+                data_dir,
+                tps=self.contender_tps,
+                image=self.config.contender.image,
+                extra_args=self.config.contender.extra_args,
             )
 
     def start(self) -> None:
@@ -221,8 +239,9 @@ class Playground:
             startup_order.append("rbuilder")
 
         # Clean up any existing containers from previous runs
+        all_containers = startup_order + (["contender"] if self.with_contender else [])
         console.print("Cleaning up existing containers...")
-        self.controller.cleanup_existing(startup_order)
+        self.controller.cleanup_existing(all_containers)
 
         console.print("Starting containers...")
         for name in startup_order:
@@ -230,9 +249,14 @@ class Playground:
                 console.print(f"  Starting {name}...")
                 self._components[name].start(self.controller)
 
-        # Wait for health checks
+        # Wait for health checks (before starting Contender which has no healthcheck)
         console.print("Waiting for services to become healthy...")
         self.controller.wait_for_all_healthy(timeout=180)
+
+        # Start Contender after other services are healthy (it has no healthcheck)
+        if self.with_contender and "contender" in self._components:
+            console.print("  Starting contender...")
+            self._components["contender"].start(self.controller)
 
         console.print("[bold green]MEV Playground is running![/bold green]")
         self._print_endpoints()
@@ -300,3 +324,47 @@ class Playground:
         if "rbuilder" in self._components:
             console.print(f"  rbuilder RPC:     http://localhost:{8645}")
         console.print("")
+
+    def start_contender(self, tps: int = 20) -> None:
+        """Start Contender against a running playground.
+
+        Args:
+            tps: Transactions per second
+        """
+        # Check if playground is running by looking for reth container in Docker
+        try:
+            reth = self.controller.client.containers.get("reth")
+            if reth.status != "running":
+                raise RuntimeError("Playground is not running. Start it first with 'mev-playground start'")
+        except Exception:
+            raise RuntimeError("Playground is not running. Start it first with 'mev-playground start'")
+
+        # Pull image if needed
+        console.print(f"Pulling {self.config.contender.image}...")
+        self.controller.pull_image(self.config.contender.image)
+
+        # Create and start contender
+        contender = ContenderComponent(
+            self.config.data_dir,
+            tps=tps,
+            image=self.config.contender.image,
+            extra_args=self.config.contender.extra_args,
+        )
+
+        # Remove existing contender container if any
+        self.controller.remove_container("contender", force=True)
+
+        console.print(f"Starting Contender with {tps} TPS...")
+        contender.start(self.controller)
+        console.print("[green]Contender is running![/green]")
+
+    def stop_contender(self) -> None:
+        """Stop the Contender container."""
+        container = self.controller.get_container("contender")
+        if container:
+            console.print("Stopping Contender...")
+            self.controller.stop_container("contender")
+            self.controller.remove_container("contender", force=True)
+            console.print("[green]Contender stopped.[/green]")
+        else:
+            console.print("[yellow]Contender is not running.[/yellow]")

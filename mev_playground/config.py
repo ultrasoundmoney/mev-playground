@@ -27,6 +27,7 @@ class StaticIPs:
 
     # Tools
     DORA = "172.28.4.1"
+    CONTENDER = "172.28.4.2"
 
 
 # Static ports
@@ -117,6 +118,14 @@ class MEVBoostConfig(BaseModel):
     image: str = "flashbots/mev-boost:latest"
 
 
+class ContenderConfig(BaseModel):
+    """Contender transaction spammer configuration."""
+
+    image: str = "flashbots/contender:latest"
+    tps: int = 20  # Transactions per second
+    extra_args: list[str] = Field(default_factory=list)
+
+
 class MEVConfig(BaseModel):
     """MEV stack configuration."""
 
@@ -133,6 +142,7 @@ class PlaygroundConfig(BaseModel):
     consensus: ConsensusConfig = Field(default_factory=ConsensusConfig)
     validators: ValidatorConfig = Field(default_factory=ValidatorConfig)
     mev: MEVConfig = Field(default_factory=MEVConfig)
+    contender: ContenderConfig = Field(default_factory=ContenderConfig)
     data_dir: Path = DEFAULT_DATA_DIR
 
     @property

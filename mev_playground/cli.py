@@ -42,7 +42,17 @@ def main():
     default=None,
     help=f"Data directory (default: {DEFAULT_DATA_DIR})",
 )
-def start(relay_image, builder, builder_image, data_dir):
+@click.option(
+    "--no-contender",
+    is_flag=True,
+    help="Skip starting Contender transaction spammer",
+)
+@click.option(
+    "--tps",
+    default=20,
+    help="Contender transactions per second (default: 20)",
+)
+def start(relay_image, builder, builder_image, data_dir, no_contender, tps):
     """Start the MEV playground."""
     try:
         playground = Playground(
@@ -50,6 +60,8 @@ def start(relay_image, builder, builder_image, data_dir):
             builder=builder,
             builder_image=builder_image,
             data_dir=data_dir,
+            with_contender=not no_contender,
+            contender_tps=tps,
         )
         playground.start()
     except Exception as e:
@@ -218,15 +230,61 @@ def info():
     help="Reth RPC URL (default: http://localhost:8545)",
 )
 def spam(rate, slots, rpc_url):
-    """Send test transactions to populate the mempool.
+    """Send test transactions to populate the mempool (simple Python spammer).
 
     Runs continuously until Ctrl+C unless --slots is specified.
+    For more advanced spamming, use 'mev-playground contender start'.
     """
     from mev_playground.spammer import TransactionSpammer
 
     try:
         spammer = TransactionSpammer(rpc_url=rpc_url)
         spammer.spam(tx_per_slot=rate, duration_slots=slots)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise click.Abort()
+
+
+@main.group()
+def contender():
+    """Manage Contender transaction spammer."""
+    pass
+
+
+@contender.command("start")
+@click.option(
+    "--tps",
+    default=20,
+    help="Transactions per second (default: 20)",
+)
+@click.option(
+    "--data-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help=f"Data directory (default: {DEFAULT_DATA_DIR})",
+)
+def contender_start(tps, data_dir):
+    """Start Contender against a running playground."""
+    try:
+        playground = Playground(data_dir=data_dir)
+        playground.start_contender(tps=tps)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise click.Abort()
+
+
+@contender.command("stop")
+@click.option(
+    "--data-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help=f"Data directory (default: {DEFAULT_DATA_DIR})",
+)
+def contender_stop(data_dir):
+    """Stop the Contender container."""
+    try:
+        playground = Playground(data_dir=data_dir)
+        playground.stop_contender()
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise click.Abort()
