@@ -10,11 +10,7 @@ dependencies = [
     "pyyaml>=6.0",
     "pydantic>=2.0",
     "eth-account>=0.11.0",
-    "py-ecc>=7.0.0",
     "rich>=13.0.0",
-    "pycryptodome>=3.23.0",
-    "mnemonic>=0.21",
-    "eth2deposit>=0.2.1",
 ]
 
 [project.scripts]

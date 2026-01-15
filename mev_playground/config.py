@@ -52,14 +52,20 @@ class StaticPorts:
 DOCKER_NETWORK_NAME = "mev-playground"
 DOCKER_NETWORK_SUBNET = "172.28.0.0/16"
 
-# Fork versions (matching builder-playground fixtures)
-GENESIS_FORK_VERSION = "0x20000089"
-ALTAIR_FORK_VERSION = "0x20000090"
-BELLATRIX_FORK_VERSION = "0x20000091"
-CAPELLA_FORK_VERSION = "0x20000092"
-DENEB_FORK_VERSION = "0x20000093"
-ELECTRA_FORK_VERSION = "0x20000094"
-FULU_FORK_VERSION = "0x20000095"
+# Fork versions (matching Kurtosis ethereum-package)
+GENESIS_FORK_VERSION = "0x10000038"
+ALTAIR_FORK_VERSION = "0x20000038"
+BELLATRIX_FORK_VERSION = "0x30000038"
+CAPELLA_FORK_VERSION = "0x40000038"
+DENEB_FORK_VERSION = "0x50000038"
+ELECTRA_FORK_VERSION = "0x60000038"
+FULU_FORK_VERSION = "0x70000038"
+
+# Default validator mnemonic (same as Kurtosis)
+DEFAULT_MNEMONIC = "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete"
+
+# Far future epoch for disabled forks
+FAR_FUTURE_EPOCH = 18446744073709551615
 
 # Default MEV keys
 DEFAULT_MEV_PUBKEY = "0xa55c1285d84ba83a5ad26420cd5ad3091e49c55a813eee651cd467db38a8c8e63192f47955e9376f6b42f6d190571cb5"
@@ -72,10 +78,24 @@ DEFAULT_DATA_DIR = Path.home() / ".mev_playground"
 class NetworkConfig(BaseModel):
     """Network configuration."""
 
-    chain_id: int = 17000  # Holesky chain ID
+    chain_id: int = 3151908  # Kurtosis default chain ID
     seconds_per_slot: int = 12
     slots_per_epoch: int = 32
-    genesis_delay: int = 30  # Seconds after genesis file creation
+    genesis_delay: int = 0  # Seconds from now until genesis
+
+    # Beacon chain preset
+    preset: str = "mainnet"
+
+    # Validator mnemonic (BIP39) - used for deterministic key generation
+    # Default is the Kurtosis mnemonic for reproducible testing
+    mnemonic: str = DEFAULT_MNEMONIC
+
+    # Fork epochs (0 = enabled at genesis, FAR_FUTURE_EPOCH = disabled)
+    electra_fork_epoch: int = 0  # Enable Electra at genesis
+    fulu_fork_epoch: int = FAR_FUTURE_EPOCH  # Disable Fulu by default
+
+    # Genesis generator Docker image
+    genesis_generator_image: str = "ethpandaops/ethereum-genesis-generator:5.2.0"
 
 
 class ExecutionConfig(BaseModel):

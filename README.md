@@ -161,10 +161,21 @@ Default data directory: `~/.mev_playground`
 
 | Setting | Default |
 |---------|---------|
-| Chain ID | 17000 |
+| Chain ID | 3151908 |
 | Seconds per slot | 12 |
 | Validator count | 100 |
 | Genesis delay | 30s |
+| Fork | Electra (enabled at genesis) |
+
+### Genesis Generation
+
+The playground uses the same genesis generation approach as [Kurtosis ethereum-package](https://github.com/ethpandaops/ethereum-package):
+
+- **EL + CL genesis** generated dynamically using `ethpandaops/ethereum-genesis-generator`
+- **Validator keystores** generated using `eth2-val-tools` from the same mnemonic
+- **Coordinated genesis** - both layers use the same genesis timestamp and validators root
+
+This ensures fresh genesis data on each start, avoiding stale genesis issues.
 
 ## Network
 

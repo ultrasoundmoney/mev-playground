@@ -594,14 +594,6 @@ wheels = [
 ]
 
 [[package]]
-name = "eth2deposit"
-version = "0.2.1"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e2/df/c673c66300a775eb82f3312cccdb335c9232a91e4c136262558d55d615e3/eth2deposit-0.2.1-py3-none-any.whl", hash = "sha256:18f4e53e5c66f185e49f8cf01181b1fe38e7bc667cd6c3bf4e67b56e5f5d13ea", size = 20237, upload-time = "2020-08-07T17:47:17.243Z" },
-]
-
-[[package]]
 name = "hexbytes"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -648,10 +640,6 @@ dependencies = [
     { name = "click" },
     { name = "docker" },
     { name = "eth-account" },
-    { name = "eth2deposit" },
-    { name = "mnemonic" },
-    { name = "py-ecc" },
-    { name = "pycryptodome" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rich" },
@@ -662,22 +650,9 @@ requires-dist = [
     { name = "click", specifier = ">=8.0.0" },
     { name = "docker", specifier = ">=7.0.0" },
     { name = "eth-account", specifier = ">=0.11.0" },
-    { name = "eth2deposit", specifier = ">=0.2.1" },
-    { name = "mnemonic", specifier = ">=0.21" },
-    { name = "py-ecc", specifier = ">=7.0.0" },
-    { name = "pycryptodome", specifier = ">=3.23.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0.0" },
-]
-
-[[package]]
-name = "mnemonic"
-version = "0.21"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ff/77/e6232ed59fbd7b90208bb8d4f89ed5aabcf30a524bc2fb8f0dafbe8e7df9/mnemonic-0.21.tar.gz", hash = "sha256:1fe496356820984f45559b1540c80ff10de448368929b9c60a2b55744cc88acf", size = 152462, upload-time = "2024-01-05T10:46:14.895Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/57/48/5abb16ce7f9d97b728e6b97c704ceaa614362e0847651f379ed0511942a0/mnemonic-0.21-py3-none-any.whl", hash = "sha256:72dc9de16ec5ef47287237b9b6943da11647a03fe7cf1f139fc3d7c4a7439288", size = 92701, upload-time = "2024-01-05T10:46:12.703Z" },
 ]
 
 [[package]]
@@ -690,19 +665,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7b/91/abdc50c4ef06fdf8d047f60ee777ca9b2a7885e1a9cea81343fbecda52d7/parsimonious-0.10.0.tar.gz", hash = "sha256:8281600da180ec8ae35427a4ab4f7b82bfec1e3d1e52f80cb60ea82b9512501c", size = 52172, upload-time = "2022-09-03T17:01:17.004Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/aa/0f/c8b64d9b54ea631fcad4e9e3c8dbe8c11bb32a623be94f22974c88e71eaf/parsimonious-0.10.0-py3-none-any.whl", hash = "sha256:982ab435fabe86519b57f6b35610aa4e4e977e9f02a14353edf4bbc75369fc0f", size = 48427, upload-time = "2022-09-03T17:01:13.814Z" },
-]
-
-[[package]]
-name = "py-ecc"
-version = "8.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "eth-typing" },
-    { name = "eth-utils" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/1c/96/e73075d5c885274efada2fbc5db6377022036c2f5b4b470dbcf4106e07d5/py_ecc-8.0.0.tar.gz", hash = "sha256:56aca19e5dc37294f60c1cc76666c03c2276e7666412b9a559fa0145d099933d", size = 51193, upload-time = "2025-04-14T16:14:03.29Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/81/58/383335eac96d2f1aba78741c6ce128c54e7eba2ea1dc47408257d751d35c/py_ecc-8.0.0-py3-none-any.whl", hash = "sha256:c0b2dfc4bde67a55122a392591a10e851a986d5128f680628c80b405f7663e13", size = 47814, upload-time = "2025-04-14T16:14:01.827Z" },
 ]
 
 [[package]]

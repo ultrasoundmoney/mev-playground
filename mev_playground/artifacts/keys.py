@@ -1,129 +1,166 @@
-"""Pre-generated BLS validator keys.
+"""BLS validator key generation using eth2-val-tools Docker container.
 
-Uses pre-generated deterministic keys (from Prysm interop) embedded as a fixture,
-eliminating the need for Docker-based key generation at runtime.
+Uses the same approach as Kurtosis ethereum-package to generate validator
+keystores from a BIP39 mnemonic.
 """
 
-import json
-from importlib import resources
+import shutil
+import tempfile
 from pathlib import Path
-from typing import NamedTuple
+
+import docker
+import yaml
+from docker.types import Mount
 
 
-# Default password used for all keystores (matches builder-playground)
+# Default password used for all keystores
 DEFAULT_SECRET = "secret"
 
+# Default eth2-val-tools image
+DEFAULT_ETH2_VAL_TOOLS_IMAGE = "protolambda/eth2-val-tools:latest"
 
-class ValidatorKey(NamedTuple):
-    """A validator key pair."""
-
-    index: int
-    pubkey: str  # hex string without 0x prefix
-    privkey: str  # hex string without 0x prefix
-    keystore: dict  # EIP-2335 keystore
+# Default mnemonic (Kurtosis default)
+DEFAULT_MNEMONIC = "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete"
 
 
-def _load_pregenerated_keys() -> list[dict]:
-    """Load pre-generated BLS keys from the embedded fixture."""
-    fixtures_path = Path(__file__).parent / "fixtures" / "bls_keys.json"
-    with open(fixtures_path) as f:
-        return json.load(f)
+def generate_validator_keystores(
+    output_dir: Path,
+    mnemonic: str = DEFAULT_MNEMONIC,
+    count: int = 100,
+    start_index: int = 0,
+    password: str = DEFAULT_SECRET,
+    image: str = DEFAULT_ETH2_VAL_TOOLS_IMAGE,
+    verbose: bool = False,
+) -> None:
+    """Generate validator keystores using eth2-val-tools Docker container.
 
-
-# Cache the loaded keys
-_PREGENERATED_KEYS: list[dict] | None = None
-
-
-def get_pregenerated_keys() -> list[dict]:
-    """Get all pre-generated BLS keys (100 total)."""
-    global _PREGENERATED_KEYS
-    if _PREGENERATED_KEYS is None:
-        _PREGENERATED_KEYS = _load_pregenerated_keys()
-    return _PREGENERATED_KEYS
-
-
-def get_validator_keys(count: int, start_index: int = 0) -> list[ValidatorKey]:
-    """Get validator keys from the pre-generated set.
-
-    Args:
-        count: Number of validators to get
-        start_index: Starting validator index
-
-    Returns:
-        List of validator keys
-
-    Raises:
-        ValueError: If requesting more keys than available
-    """
-    keys = get_pregenerated_keys()
-
-    if start_index + count > len(keys):
-        raise ValueError(
-            f"Requested {count} keys starting at {start_index}, "
-            f"but only {len(keys)} pre-generated keys available"
-        )
-
-    result = []
-    for i in range(count):
-        key_data = keys[start_index + i]
-        # Parse the keystore from JSON string if needed
-        keystore = key_data["keystore"]
-        if isinstance(keystore, str):
-            keystore = json.loads(keystore)
-
-        result.append(
-            ValidatorKey(
-                index=start_index + i,
-                pubkey=key_data["pub"],
-                privkey=key_data["priv"],
-                keystore=keystore,
-            )
-        )
-
-    return result
-
-
-def write_validator_files(output_dir: Path, keys: list[ValidatorKey]) -> None:
-    """Write validator keystores and secrets to disk for Lighthouse.
+    This uses the same approach as Kurtosis ethereum-package to generate
+    validator keystores from a BIP39 mnemonic.
 
     Args:
         output_dir: Directory to write validator files
-        keys: List of validator keys to write
+        mnemonic: BIP39 mnemonic for key derivation
+        count: Number of validators to generate
+        start_index: Starting validator index
+        password: Password for keystores
+        image: Docker image for eth2-val-tools
+        verbose: Print verbose output
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    keystores_dir = output_dir / "keystores"
-    secrets_dir = output_dir / "secrets"
-    keystores_dir.mkdir(exist_ok=True)
-    secrets_dir.mkdir(exist_ok=True)
+    client = docker.from_env()
 
-    for key in keys:
-        # Write keystore
-        keystore_dir = keystores_dir / f"validator_{key.index}"
-        keystore_dir.mkdir(exist_ok=True)
-        keystore_file = keystore_dir / "voting-keystore.json"
-        with open(keystore_file, "w") as f:
-            json.dump(key.keystore, f, indent=2)
+    # Pull image if needed
+    try:
+        client.images.get(image)
+    except docker.errors.ImageNotFound:
+        if verbose:
+            print(f"Pulling {image}...")
+        client.images.pull(image)
 
-        # Write secret (password)
-        secret_file = secrets_dir / f"validator_{key.index}"
-        with open(secret_file, "w") as f:
-            f.write(DEFAULT_SECRET)
+    # Create temp directory for output
+    # eth2-val-tools requires the output directory to NOT exist, but parent must exist
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        # Mount parent dir, let tool create 'keystores' subdirectory
+        keystores_output = tmp_path / "keystores"
+        # Do NOT create keystores_output - the tool wants to create it itself
 
-    # Write validator definitions for Lighthouse
-    # Container paths: validators dir is mounted at /data/validators
-    validator_definitions = []
-    for key in keys:
-        validator_definitions.append(
-            {
+        # Run eth2-val-tools to generate keystores
+        # The container entrypoint is eth2-val-tools, so we just pass subcommand and args
+        command = [
+            "keystores",
+            "--insecure",
+            "--prysm-pass", password,
+            "--out-loc", "/parent/keystores",  # Tool will create this directory
+            "--source-mnemonic", mnemonic,
+            "--source-min", str(start_index),
+            "--source-max", str(start_index + count),
+        ]
+
+        if verbose:
+            print(f"Running eth2-val-tools to generate {count} keystores...")
+
+        try:
+            result = client.containers.run(
+                image=image,
+                command=command,
+                mounts=[
+                    Mount(
+                        target="/parent",
+                        source=str(tmp_path),
+                        type="bind",
+                    ),
+                ],
+                remove=True,
+                detach=False,
+                stdout=True,
+                stderr=True,
+            )
+
+            if verbose:
+                print(f"eth2-val-tools output:\n{result.decode('utf-8')}")
+
+        except docker.errors.ContainerError as e:
+            raise RuntimeError(
+                f"Failed to generate validator keystores: "
+                f"{e.stderr.decode('utf-8') if e.stderr else str(e)}"
+            )
+
+        # eth2-val-tools outputs to /output/keys and /output/secrets
+        keys_dir = keystores_output / "keys"
+        secrets_dir_src = keystores_output / "secrets"
+
+        if not keys_dir.exists():
+            raise RuntimeError(
+                f"Keystores not generated. Output directory contents: "
+                f"{list(keystores_output.iterdir())}"
+            )
+
+        # Create output structure for Lighthouse
+        keystores_dir = output_dir / "keystores"
+        secrets_dir = output_dir / "secrets"
+        keystores_dir.mkdir(exist_ok=True)
+        secrets_dir.mkdir(exist_ok=True)
+
+        # Copy keystores to Lighthouse format
+        # eth2-val-tools creates: keys/0x<pubkey>/voting-keystore.json
+        # We need: keystores/validator_N/voting-keystore.json
+        validator_definitions = []
+
+        for idx, keystore_dir in enumerate(sorted(keys_dir.iterdir())):
+            if not keystore_dir.is_dir():
+                continue
+
+            pubkey = keystore_dir.name  # 0x<pubkey>
+            validator_idx = start_index + idx
+
+            # Copy keystore
+            src_keystore = keystore_dir / "voting-keystore.json"
+            dst_keystore_dir = keystores_dir / f"validator_{validator_idx}"
+            dst_keystore_dir.mkdir(exist_ok=True)
+            shutil.copy(src_keystore, dst_keystore_dir / "voting-keystore.json")
+
+            # Copy secret (password file)
+            src_secret = secrets_dir_src / pubkey
+            if src_secret.exists():
+                shutil.copy(src_secret, secrets_dir / f"validator_{validator_idx}")
+            else:
+                # Write password if secret file doesn't exist
+                (secrets_dir / f"validator_{validator_idx}").write_text(password)
+
+            # Add to validator definitions
+            validator_definitions.append({
                 "enabled": True,
-                "voting_public_key": f"0x{key.pubkey}",
+                "voting_public_key": pubkey,
                 "type": "local_keystore",
-                "voting_keystore_path": f"/data/validators/keystores/validator_{key.index}/voting-keystore.json",
-                "voting_keystore_password_path": f"/data/validators/secrets/validator_{key.index}",
-            }
-        )
+                "voting_keystore_path": f"/data/validators/keystores/validator_{validator_idx}/voting-keystore.json",
+                "voting_keystore_password_path": f"/data/validators/secrets/validator_{validator_idx}",
+            })
 
-    import yaml
-    with open(output_dir / "validator_definitions.yml", "w") as f:
-        yaml.dump(validator_definitions, f)
+        # Write validator definitions for Lighthouse
+        with open(output_dir / "validator_definitions.yml", "w") as f:
+            yaml.dump(validator_definitions, f)
+
+        if verbose:
+            print(f"Generated {len(validator_definitions)} validator keystores in {output_dir}")

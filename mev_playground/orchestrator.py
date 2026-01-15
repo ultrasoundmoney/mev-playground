@@ -12,12 +12,12 @@ from mev_playground.docker.controller import DockerController
 from mev_playground.docker.network import NetworkManager
 from mev_playground.artifacts import (
     generate_jwt_secret,
-    generate_el_genesis,
-    generate_beacon_genesis,
-    get_genesis_timestamp,
-    get_genesis_validators_root,
+    generate_genesis,
+    GenesisGeneratorConfig,
+    get_genesis_validators_root_from_dir,
+    get_genesis_time_from_dir,
 )
-from mev_playground.artifacts.keys import get_validator_keys, write_validator_files
+from mev_playground.artifacts.keys import generate_validator_keystores
 from mev_playground.components.reth import RethComponent
 from mev_playground.components.lighthouse import (
     LighthouseBeaconComponent,
@@ -84,44 +84,78 @@ class Playground:
         self._components = {}
 
     def _ensure_artifacts(self) -> None:
-        """Ensure all artifacts are generated."""
+        """Ensure all artifacts are generated using ethereum-genesis-generator."""
         artifacts_dir = self.config.artifacts_dir
 
-        # Check if artifacts already exist
+        # Check if artifacts already exist (all required files)
         jwt_path = artifacts_dir / "jwt.hex"
         genesis_path = artifacts_dir / "genesis.json"
-        validators_dir = artifacts_dir / "validators"
         beacon_dir = artifacts_dir / "beacon"
+        validators_dir = artifacts_dir / "validators"
+        genesis_ssz_path = beacon_dir / "genesis.ssz"
+        config_yaml_path = beacon_dir / "config.yaml"
+        validators_root_path = beacon_dir / "genesis_validators_root.txt"
+        validator_definitions_path = validators_dir / "validator_definitions.yml"
 
         if all([
             jwt_path.exists(),
             genesis_path.exists(),
-            validators_dir.exists(),
-            beacon_dir.exists(),
+            genesis_ssz_path.exists(),
+            config_yaml_path.exists(),
+            validators_root_path.exists(),
+            validator_definitions_path.exists(),
         ]):
             console.print("[green]Using existing artifacts[/green]")
             return
 
-        console.print("[yellow]Generating artifacts...[/yellow]")
+        console.print("[yellow]Generating artifacts using ethereum-genesis-generator...[/yellow]")
 
         # Ensure artifacts directory exists
         artifacts_dir.mkdir(parents=True, exist_ok=True)
+        beacon_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate JWT secret
         generate_jwt_secret(jwt_path)
         console.print("  JWT secret generated")
 
-        # Copy EL genesis from fixture
-        generate_el_genesis(genesis_path, 0)
-        console.print("  EL genesis copied")
+        # Create genesis generator config from playground config
+        genesis_config = GenesisGeneratorConfig(
+            chain_id=self.config.network.chain_id,
+            preset=self.config.network.preset,
+            genesis_delay=self.config.network.genesis_delay,
+            seconds_per_slot=self.config.network.seconds_per_slot,
+            slot_duration_ms=self.config.network.seconds_per_slot * 1000,
+            num_validators=self.config.validators.count,
+            mnemonic=self.config.network.mnemonic,
+            electra_fork_epoch=self.config.network.electra_fork_epoch,
+            fulu_fork_epoch=self.config.network.fulu_fork_epoch,
+            genesis_generator_image=self.config.network.genesis_generator_image,
+        )
 
-        # Get pre-generated validator keys and write to disk
-        keys = get_validator_keys(self.config.validators.count)
-        write_validator_files(validators_dir, keys)
-        console.print(f"  {len(keys)} validator keys loaded")
+        # Generate EL and CL genesis using Docker
+        console.print("  Running ethereum-genesis-generator (this may take a moment)...")
+        genesis_data = generate_genesis(
+            output_dir=beacon_dir,
+            config=genesis_config,
+            verbose=False,
+        )
 
-        # Copy beacon chain genesis from fixtures
-        generate_beacon_genesis(beacon_dir)
+        # Copy EL genesis to main artifacts dir (for components that expect it there)
+        shutil.copy(genesis_data.el_genesis_path, genesis_path)
+
+        console.print(f"  Genesis generated with {self.config.validators.count} validators")
+        console.print(f"  Genesis time: {genesis_data.genesis_time}")
+
+        # Generate validator keystores using eth2-val-tools (same mnemonic as genesis)
+        console.print("  Generating validator keystores...")
+        generate_validator_keystores(
+            output_dir=validators_dir,
+            mnemonic=self.config.network.mnemonic,
+            count=self.config.validators.count,
+            verbose=False,
+        )
+        console.print(f"  {self.config.validators.count} validator keystores generated")
+        console.print(f"  Genesis validators root: {genesis_data.genesis_validators_root}")
 
         # Copy JWT to beacon dir for Lighthouse
         shutil.copy(jwt_path, beacon_dir / "jwt.hex")
@@ -146,6 +180,11 @@ class Playground:
     def _create_components(self) -> None:
         """Create all component instances."""
         data_dir = self.config.data_dir
+        beacon_dir = self.config.artifacts_dir / "beacon"
+
+        # Read genesis data from generated artifacts
+        genesis_time = get_genesis_time_from_dir(beacon_dir)
+        genesis_validators_root = get_genesis_validators_root_from_dir(beacon_dir)
 
         # Core Ethereum stack
         self._components["reth"] = RethComponent(data_dir, self.config)
@@ -171,8 +210,8 @@ class Playground:
         self._components["mev-ultrasound-relay"] = UltrasoundRelayComponent(
             data_dir,
             self.config,
-            get_genesis_timestamp(),
-            get_genesis_validators_root(),
+            genesis_time,
+            genesis_validators_root,
         )
 
         # Builder
@@ -246,6 +285,11 @@ class Playground:
         console.print("Starting containers...")
         for name in startup_order:
             if name in self._components:
+                # Add delay before relay to ensure genesis time has passed
+                if name == "mev-ultrasound-relay":
+                    import time
+                    console.print("  Waiting for genesis time to pass...")
+                    time.sleep(10)
                 console.print(f"  Starting {name}...")
                 self._components[name].start(self.controller)
 

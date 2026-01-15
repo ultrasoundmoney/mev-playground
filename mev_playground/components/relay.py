@@ -124,7 +124,7 @@ class UltrasoundRelayComponent(Component):
                 "interval": 5000000000,  # 5 seconds
                 "timeout": 3000000000,   # 3 seconds
                 "retries": 60,           # More retries to allow for genesis wait
-                "start_period": 60000000000,  # 60 seconds to allow genesis time to pass
+                "start_period": 10000000000,  # 60 seconds to allow genesis time to pass
             },
             depends_on=["redis", "mevdb", "localdb", "globaldb", "lighthouse-bn", "reth"],
         )
