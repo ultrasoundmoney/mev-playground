@@ -8,6 +8,7 @@ with a values.env configuration file to produce coordinated genesis artifacts.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 import time
@@ -260,8 +261,8 @@ def generate_genesis(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Create a temporary directory for the configuration in the current directory
-    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
-        tmp_path = Path(tmp_dir)
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
+        tmp_path = Path(tmp_dir).resolve()
 
         # Write values.env
         values_env_content = _generate_values_env(config, genesis_time)
@@ -294,33 +295,35 @@ def generate_genesis(
         # Run the container
         # The container has templates at /config/cl/ and /config/el/
         # It reads values.env from /config/values.env and additional-contracts from the path specified
-        # We mount our files to /input and use entrypoint to copy them in
+        # We mount our config files directly to avoid permission issues when running as non-root
         if verbose:
             print("Running genesis generator...")
 
         try:
             container = client.containers.run(
                 image=config.genesis_generator_image,
-                # Copy values.env to where the entrypoint expects it, then run
-                entrypoint=["/bin/bash", "-c"],
-                command=[
-                    f"cp /input/values.env /config/values.env && "
-                    f"cp /input/additional-contracts.json /config/additional-contracts.json && "
-                    f"/work/entrypoint.sh all"
-                ],
+                command=["all"],
                 mounts=[
                     Mount(
-                        target="/input",
-                        source=str(tmp_path),
+                        target="/config/values.env",
+                        source=str(values_env_path.resolve()),
+                        type="bind",
+                        read_only=True,
+                    ),
+                    Mount(
+                        target="/config/additional-contracts.json",
+                        source=str(contracts_path.resolve()),
                         type="bind",
                         read_only=True,
                     ),
                     Mount(
                         target="/data",
-                        source=str(container_output),
+                        source=str(container_output.resolve()),
                         type="bind",
                     ),
                 ],
+                # Run as current user so files can be cleaned up
+                user=f"{os.getuid()}:{os.getgid()}",
                 remove=True,
                 detach=False,
                 stdout=True,

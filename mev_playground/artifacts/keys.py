@@ -4,6 +4,7 @@ Uses the same approach as Kurtosis ethereum-package to generate validator
 keystores from a BIP39 mnemonic.
 """
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -92,6 +93,8 @@ def generate_validator_keystores(
                         type="bind",
                     ),
                 ],
+                # Run as current user so files can be cleaned up
+                user=f"{os.getuid()}:{os.getgid()}",
                 remove=True,
                 detach=False,
                 stdout=True,
