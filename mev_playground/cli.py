@@ -1,12 +1,18 @@
 """CLI entry point for MEV Playground."""
 
 import click
+import sys
+import time
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
+from web3 import Web3
 
 from mev_playground.config import PlaygroundConfig, DEFAULT_DATA_DIR
 from mev_playground.orchestrator import Playground
+
+# Default rbuilder extra_data (🦇🔊 = "ultrasound")
+DEFAULT_EXTRA_DATA = "🦇🔊"
 
 
 console = Console()
@@ -98,11 +104,15 @@ def stop(data_dir):
     default=None,
     help=f"Data directory (default: {DEFAULT_DATA_DIR})",
 )
-@click.confirmation_option(
-    prompt="Are you sure you want to delete all playground data?"
+@click.option(
+    "-y", "--yes",
+    is_flag=True,
+    help="Skip confirmation prompt",
 )
-def nuke(artifacts_only, data_dir):
+def nuke(artifacts_only, data_dir, yes):
     """Delete all playground data and start fresh."""
+    if not yes:
+        click.confirm("Are you sure you want to delete all playground data?", abort=True)
     try:
         playground = Playground(data_dir=data_dir)
         playground.nuke(artifacts_only=artifacts_only)
@@ -288,6 +298,78 @@ def contender_stop(data_dir):
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise click.Abort()
+
+
+@main.command("assert-blocks")
+@click.option(
+    "--slots",
+    required=True,
+    type=int,
+    help="Number of consecutive slots/blocks to check",
+)
+@click.option(
+    "--extra-data",
+    default=DEFAULT_EXTRA_DATA,
+    help=f"Expected extraData string (default: {DEFAULT_EXTRA_DATA})",
+)
+@click.option(
+    "--rpc-url",
+    default="http://localhost:8545",
+    help="Execution client RPC URL (default: http://localhost:8545)",
+)
+def assert_blocks(slots, extra_data, rpc_url):
+    """Assert that blocks have the expected extraData for n slots.
+
+    Useful for integration tests to verify the builder is producing blocks.
+    Exits with code 0 if all blocks match, 1 on mismatch or error.
+    """
+    try:
+        w3 = Web3(Web3.HTTPProvider(rpc_url))
+        if not w3.is_connected():
+            console.print(f"[red]Error: Cannot connect to {rpc_url}[/red]")
+            sys.exit(1)
+
+        expected_bytes = extra_data.encode("utf-8")
+        matched = 0
+        seen_blocks = set()
+
+        console.print(f"Checking {slots} blocks for extraData: {extra_data}")
+
+        while matched < slots:
+            latest = w3.eth.get_block("latest")
+            block_num = latest["number"]
+
+            if block_num not in seen_blocks:
+                seen_blocks.add(block_num)
+                actual_extra_data = latest["extraData"]
+
+                if actual_extra_data == expected_bytes:
+                    matched += 1
+                    console.print(
+                        f"[green]Block {block_num}: ✓ extraData matches ({extra_data}) [{matched}/{slots}][/green]"
+                    )
+                else:
+                    # Try to decode as UTF-8 for display
+                    try:
+                        actual_str = actual_extra_data.decode("utf-8")
+                    except UnicodeDecodeError:
+                        actual_str = actual_extra_data.hex()
+
+                    console.print(
+                        f"[red]Block {block_num}: ✗ extraData mismatch[/red]"
+                    )
+                    console.print(f"  Expected: {extra_data}")
+                    console.print(f"  Got:      {actual_str}")
+                    sys.exit(1)
+
+            time.sleep(1)
+
+        console.print(f"[green]All {slots} blocks matched![/green]")
+        sys.exit(0)
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
