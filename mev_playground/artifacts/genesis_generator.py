@@ -259,8 +259,8 @@ def generate_genesis(
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create a temporary directory for the configuration
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    # Create a temporary directory for the configuration in the current directory
+    with tempfile.TemporaryDirectory(dir=".") as tmp_dir:
         tmp_path = Path(tmp_dir)
 
         # Write values.env
