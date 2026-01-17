@@ -61,7 +61,7 @@ def generate_validator_keystores(
 
     # Create temp directory for output
     # eth2-val-tools requires the output directory to NOT exist, but parent must exist
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
         tmp_path = Path(tmp_dir)
         # Mount parent dir, let tool create 'keystores' subdirectory
         keystores_output = tmp_path / "keystores"

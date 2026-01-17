@@ -215,7 +215,7 @@ class Playground:
         )
 
         # Builder
-        if self.config.mev.builder.enabled and self.config.mev.builder.type == "rbuilder":
+        if self.config.mev.builder.enabled and self.config.mev.builder.type in ("rbuilder", "custom"):
             reth_component = self._components["reth"]
             self._components["rbuilder"] = RbuilderComponent(
                 data_dir,

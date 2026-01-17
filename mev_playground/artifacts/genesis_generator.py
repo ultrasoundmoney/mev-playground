@@ -299,6 +299,9 @@ def generate_genesis(
         if verbose:
             print("Running genesis generator...")
 
+        print(f"values env path: {str(values_env_path.resolve())}")
+        print(f"contracts path: {str(contracts_path.resolve())}")
+        print(f"container output path: {str(container_output.resolve())}")
         try:
             container = client.containers.run(
                 image=config.genesis_generator_image,
