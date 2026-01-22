@@ -107,20 +107,20 @@ priority = 0
             mounts=[
                 Mount(
                     target="/config",
-                    source=str(self._config_path.parent),
+                    source=str(self._config_path.parent.resolve()),
                     type="bind",
                     read_only=True,
                 ),
                 # Mount Reth data directory for IPC and state access
                 Mount(
                     target="/reth_data",
-                    source=str(self.reth_data_path),
+                    source=str(self.reth_data_path.resolve()),
                     type="bind",
                 ),
                 # Mount artifacts for genesis.json
                 Mount(
                     target="/genesis",
-                    source=str(artifacts_path),
+                    source=str(artifacts_path.resolve()),
                     type="bind",
                     read_only=True,
                 ),
@@ -133,7 +133,6 @@ priority = 0
                 "start_period": 60000000000,  # 60s start period for rbuilder to initialize
             },
             depends_on=["reth", "mev-ultrasound-relay", "lighthouse-bn"],
-            user="root",
         )
 
     @property
