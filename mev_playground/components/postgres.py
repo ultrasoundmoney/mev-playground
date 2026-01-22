@@ -60,6 +60,8 @@ class PostgresComponent(Component):
                 "retries": 10,
                 "start_period": 5000000000,
             },
+            # Postgres image entrypoint handles user switching internally via gosu
+            user="root",
         )
 
     @property

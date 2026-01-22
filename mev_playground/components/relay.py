@@ -127,6 +127,8 @@ class UltrasoundRelayComponent(Component):
                 "start_period": 10000000000,  # 60 seconds to allow genesis time to pass
             },
             depends_on=["redis", "mevdb", "localdb", "globaldb", "lighthouse-bn", "reth"],
+            # Relay uses supervisord which requires root to drop privileges
+            user="root",
         )
 
     @property

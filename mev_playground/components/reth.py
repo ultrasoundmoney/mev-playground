@@ -45,6 +45,7 @@ class RethComponent(Component):
             "--authrpc.jwtsecret", "/genesis/jwt.hex",
             "--metrics", f"0.0.0.0:{StaticPorts.RETH_METRICS}",
             "--log.stdout.format", "terminal",
+            "--log.file.directory", "/data/logs",  # Ensure logs go to writable directory
             "--full",
             "--ipcpath", "/data/reth.ipc",  # IPC socket for rbuilder integration
             # Required for proper engine API payload building

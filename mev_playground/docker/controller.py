@@ -1,6 +1,7 @@
 """Docker controller for managing containers."""
 
 import logging
+import os
 from typing import Optional
 import docker
 from docker.models.containers import Container
@@ -9,6 +10,15 @@ from docker.types import Mount
 from mev_playground.config import DOCKER_NETWORK_NAME
 
 logger = logging.getLogger(__name__)
+
+
+def get_host_user() -> str:
+    """Get the current host user as 'uid:gid' for Docker user mapping.
+
+    On Linux, this ensures files created in bind mounts are owned by the host user.
+    On macOS, Docker Desktop handles this automatically, but setting it doesn't hurt.
+    """
+    return f"{os.getuid()}:{os.getgid()}"
 
 
 class DockerController:
@@ -67,11 +77,16 @@ class DockerController:
             depends_on: List of container names this container depends on
             user: User to run as
         """
+        # Default to host user if not specified to ensure correct file ownership on Linux
+        if user is None:
+            user = get_host_user()
+
         logger.debug(f"Starting container '{name}' with image '{image}'")
         logger.debug(f"  Static IP: {static_ip}")
         logger.debug(f"  Command: {command}")
         logger.debug(f"  Mounts: {mounts}")
         logger.debug(f"  Depends on: {depends_on}")
+        logger.debug(f"  User: {user}")
 
         # Wait for dependencies to be healthy
         if depends_on:

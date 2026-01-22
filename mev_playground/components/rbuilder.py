@@ -133,6 +133,7 @@ priority = 0
                 "start_period": 60000000000,  # 60s start period for rbuilder to initialize
             },
             depends_on=["reth", "mev-ultrasound-relay", "lighthouse-bn"],
+            user="root",
         )
 
     @property
