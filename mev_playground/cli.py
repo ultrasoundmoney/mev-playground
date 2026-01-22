@@ -1,6 +1,7 @@
 """CLI entry point for MEV Playground."""
 
 import click
+import logging
 import sys
 import time
 from pathlib import Path
@@ -18,11 +19,30 @@ DEFAULT_EXTRA_DATA = "🦇🔊"
 console = Console()
 
 
+def setup_logging(debug: bool = False) -> None:
+    """Configure logging for the CLI."""
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
 @click.group()
 @click.version_option(version="0.1.0")
-def main():
+@click.option(
+    "--debug",
+    is_flag=True,
+    envvar="MEV_PLAYGROUND_DEBUG",
+    help="Enable debug logging",
+)
+@click.pass_context
+def main(ctx, debug):
     """MEV Playground - Minimal MEV integration testing environment."""
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj["debug"] = debug
+    setup_logging(debug)
 
 
 @main.command()

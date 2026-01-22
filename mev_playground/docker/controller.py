@@ -1,11 +1,14 @@
 """Docker controller for managing containers."""
 
+import logging
 from typing import Optional
 import docker
 from docker.models.containers import Container
 from docker.types import Mount
 
 from mev_playground.config import DOCKER_NETWORK_NAME
+
+logger = logging.getLogger(__name__)
 
 
 class DockerController:
@@ -64,11 +67,19 @@ class DockerController:
             depends_on: List of container names this container depends on
             user: User to run as
         """
+        logger.debug(f"Starting container '{name}' with image '{image}'")
+        logger.debug(f"  Static IP: {static_ip}")
+        logger.debug(f"  Command: {command}")
+        logger.debug(f"  Mounts: {mounts}")
+        logger.debug(f"  Depends on: {depends_on}")
+
         # Wait for dependencies to be healthy
         if depends_on:
             for dep_name in depends_on:
                 if dep_name in self._containers:
+                    logger.debug(f"  Waiting for dependency '{dep_name}' to be healthy...")
                     self._wait_for_healthy(dep_name)
+                    logger.debug(f"  Dependency '{dep_name}' is healthy")
 
         # Configure networking
         networking_config = {
@@ -82,24 +93,50 @@ class DockerController:
         if ports:
             port_bindings = {f"{cp}/tcp": hp for cp, hp in ports.items()}
 
-        container = self.client.containers.run(
-            image=image,
-            name=name,
-            command=command,
-            environment=environment,
-            ports=port_bindings,
-            volumes=volumes,
-            mounts=mounts,
-            network=DOCKER_NETWORK_NAME,
-            networking_config=networking_config,
-            healthcheck=healthcheck,
-            detach=True,
-            remove=False,
-            user=user,
-        )
+        try:
+            container = self.client.containers.run(
+                image=image,
+                name=name,
+                command=command,
+                environment=environment,
+                ports=port_bindings,
+                volumes=volumes,
+                mounts=mounts,
+                network=DOCKER_NETWORK_NAME,
+                networking_config=networking_config,
+                healthcheck=healthcheck,
+                detach=True,
+                remove=False,
+                user=user,
+            )
+            logger.debug(f"Container '{name}' created with ID: {container.id[:12]}")
 
-        self._containers[name] = container
-        return container
+            # Check if container exited immediately (crash on startup)
+            container.reload()
+            if container.status == "exited":
+                exit_code = container.attrs.get("State", {}).get("ExitCode", "unknown")
+                logs = container.logs(tail=50).decode("utf-8", errors="replace")
+                logger.error(f"Container '{name}' exited immediately with code {exit_code}")
+                logger.error(f"Container '{name}' logs:\n{logs}")
+                raise RuntimeError(
+                    f"Container '{name}' exited immediately with code {exit_code}. "
+                    f"Last logs:\n{logs}"
+                )
+
+            self._containers[name] = container
+            return container
+
+        except docker.errors.ContainerError as e:
+            logger.error(f"Container '{name}' failed to start: {e}")
+            logger.error(f"Exit code: {e.exit_status}")
+            logger.error(f"Stderr: {e.stderr}")
+            raise
+        except docker.errors.ImageNotFound as e:
+            logger.error(f"Image '{image}' not found for container '{name}': {e}")
+            raise
+        except docker.errors.APIError as e:
+            logger.error(f"Docker API error starting container '{name}': {e}")
+            raise
 
     def _wait_for_healthy(self, name: str, timeout: int = 120) -> None:
         """Wait for a container to become healthy."""
@@ -107,31 +144,73 @@ class DockerController:
 
         container = self._containers.get(name)
         if not container:
+            logger.warning(f"Container '{name}' not found in tracked containers")
             return
 
+        logger.debug(f"Waiting for container '{name}' to become healthy (timeout: {timeout}s)")
         start = time.time()
+        last_status = None
+
         while time.time() - start < timeout:
             container.reload()
-            health = container.attrs.get("State", {}).get("Health", {})
+            state = container.attrs.get("State", {})
+            health = state.get("Health", {})
             status = health.get("Status", "none")
+            container_status = container.status
+
+            # Log status changes
+            if status != last_status:
+                logger.debug(
+                    f"Container '{name}' status: {container_status}, health: {status}"
+                )
+                last_status = status
+
+            # Check if container exited unexpectedly
+            if container_status == "exited":
+                exit_code = state.get("ExitCode", "unknown")
+                logs = container.logs(tail=100).decode("utf-8", errors="replace")
+                logger.error(f"Container '{name}' exited with code {exit_code}")
+                logger.error(f"Container '{name}' logs:\n{logs}")
+                raise RuntimeError(
+                    f"Container '{name}' exited unexpectedly with code {exit_code}. "
+                    f"Last logs:\n{logs}"
+                )
 
             if status == "healthy":
+                logger.debug(f"Container '{name}' is healthy")
                 return
             elif status == "unhealthy":
+                # Get health check logs for debugging
+                health_log = health.get("Log", [])
+                if health_log:
+                    last_check = health_log[-1] if health_log else {}
+                    logger.error(
+                        f"Container '{name}' healthcheck failed: "
+                        f"exit_code={last_check.get('ExitCode')}, "
+                        f"output={last_check.get('Output', '')[:500]}"
+                    )
+                logs = container.logs(tail=50).decode("utf-8", errors="replace")
+                logger.error(f"Container '{name}' logs:\n{logs}")
                 raise RuntimeError(f"Container {name} is unhealthy")
 
             # If no healthcheck, just check if running
-            if not health and container.status == "running":
+            if not health and container_status == "running":
+                logger.debug(f"Container '{name}' is running (no healthcheck)")
                 return
 
             time.sleep(1)
 
+        # Timeout - get logs for debugging
+        logs = container.logs(tail=50).decode("utf-8", errors="replace")
+        logger.error(f"Container '{name}' health timeout. Last logs:\n{logs}")
         raise TimeoutError(f"Container {name} did not become healthy within {timeout}s")
 
     def wait_for_all_healthy(self, timeout: int = 120) -> None:
         """Wait for all containers to become healthy."""
+        logger.info(f"Waiting for all containers to become healthy: {list(self._containers.keys())}")
         for name in self._containers:
             self._wait_for_healthy(name, timeout)
+        logger.info("All containers are healthy")
 
     def stop_container(self, name: str, timeout: int = 10) -> None:
         """Stop a specific container."""
