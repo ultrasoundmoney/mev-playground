@@ -61,6 +61,7 @@ class DockerController:
         healthcheck: Optional[dict] = None,
         depends_on: Optional[list[str]] = None,
         user: Optional[str] = None,
+        ipc_mode: Optional[str] = None,
     ) -> Container:
         """Run a container with static IP assignment.
 
@@ -76,6 +77,7 @@ class DockerController:
             healthcheck: Docker healthcheck configuration
             depends_on: List of container names this container depends on
             user: User to run as
+            ipc_mode: IPC namespace mode (e.g., "shareable", "container:<name>")
         """
         # Default to host user if not specified to ensure correct file ownership on Linux
         if user is None:
@@ -87,6 +89,7 @@ class DockerController:
         logger.debug(f"  Mounts: {mounts}")
         logger.debug(f"  Depends on: {depends_on}")
         logger.debug(f"  User: {user}")
+        logger.debug(f"  IPC mode: {ipc_mode}")
 
         # Wait for dependencies to be healthy
         if depends_on:
@@ -123,6 +126,7 @@ class DockerController:
                 detach=True,
                 remove=False,
                 user=user,
+                ipc_mode=ipc_mode,
             )
             logger.debug(f"Container '{name}' created with ID: {container.id[:12]}")
 

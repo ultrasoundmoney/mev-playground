@@ -26,6 +26,7 @@ class ContainerConfig:
     healthcheck: Optional[dict] = None
     depends_on: list[str] = field(default_factory=list)
     user: Optional[str] = None
+    ipc_mode: Optional[str] = None  # IPC namespace mode (e.g., "shareable", "container:<name>")
 
 
 class Component(ABC):
@@ -74,6 +75,7 @@ class Component(ABC):
             healthcheck=config.healthcheck,
             depends_on=config.depends_on if config.depends_on else None,
             user=config.user,
+            ipc_mode=config.ipc_mode,
         )
 
         return self._container
