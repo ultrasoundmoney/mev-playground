@@ -27,6 +27,7 @@ class ContainerConfig:
     depends_on: list[str] = field(default_factory=list)
     user: Optional[str] = None
     ipc_mode: Optional[str] = None  # IPC namespace mode (e.g., "shareable", "container:<name>")
+    pid_mode: Optional[str] = None  # PID namespace mode (e.g., "container:<name>")
     shm_size: Optional[str] = None  # Shared memory size (e.g., "1g", "512m")
 
 
@@ -77,6 +78,7 @@ class Component(ABC):
             depends_on=config.depends_on if config.depends_on else None,
             user=config.user,
             ipc_mode=config.ipc_mode,
+            pid_mode=config.pid_mode,
             shm_size=config.shm_size,
         )
 

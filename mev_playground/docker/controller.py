@@ -62,6 +62,7 @@ class DockerController:
         depends_on: Optional[list[str]] = None,
         user: Optional[str] = None,
         ipc_mode: Optional[str] = None,
+        pid_mode: Optional[str] = None,
         shm_size: Optional[str] = None,
     ) -> Container:
         """Run a container with static IP assignment.
@@ -79,6 +80,7 @@ class DockerController:
             depends_on: List of container names this container depends on
             user: User to run as
             ipc_mode: IPC namespace mode (e.g., "shareable", "container:<name>")
+            pid_mode: PID namespace mode (e.g., "container:<name>")
             shm_size: Shared memory size (e.g., "1g", "512m")
         """
         # Default to host user if not specified to ensure correct file ownership on Linux
@@ -92,6 +94,7 @@ class DockerController:
         logger.debug(f"  Depends on: {depends_on}")
         logger.debug(f"  User: {user}")
         logger.debug(f"  IPC mode: {ipc_mode}")
+        logger.debug(f"  PID mode: {pid_mode}")
         logger.debug(f"  SHM size: {shm_size}")
 
         # Wait for dependencies to be healthy
@@ -130,6 +133,7 @@ class DockerController:
                 remove=False,
                 user=user,
                 ipc_mode=ipc_mode,
+                pid_mode=pid_mode,
                 shm_size=shm_size,
             )
             logger.debug(f"Container '{name}' created with ID: {container.id[:12]}")

@@ -133,8 +133,7 @@ priority = 0
                 "start_period": 60000000000,  # 60s start period for rbuilder to initialize
             },
             depends_on=["reth", "mev-ultrasound-relay", "lighthouse-bn"],
-            ipc_mode="container:reth",  # Share IPC namespace with reth for MDBX shared memory
-            shm_size="1g",  # Increased shared memory for MDBX coordination
+            pid_mode="container:reth",  # Share PID namespace with reth for MDBX lock coordination
         )
 
     @property

@@ -89,8 +89,6 @@ class RethComponent(Component):
                 "retries": 10,
                 "start_period": 10000000000,  # 10s
             },
-            ipc_mode="shareable",  # Allow other containers to share IPC namespace for MDBX
-            shm_size="1g",  # Increased shared memory for MDBX coordination
         )
 
     @property
