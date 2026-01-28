@@ -50,7 +50,7 @@ cl_node_url = ["http://{StaticIPs.LIGHTHOUSE_BN}:{StaticPorts.LIGHTHOUSE_HTTP}"]
 enabled_relays = ["ultrasound-local"]
 coinbase_secret_key = "{coinbase_key}"
 relay_secret_key = "{relay_key}"
-live_builders = ["mgp-ordering"]
+live_builders = ["fast-ordering"]
 jsonrpc_server_port = {StaticPorts.RBUILDER_RPC}
 jsonrpc_server_ip = "0.0.0.0"
 log_level = "info,rbuilder=debug"
@@ -61,6 +61,15 @@ root_hash_use_sparse_trie = true
 root_hash_compare_sparse_trie = false
 extra_data = "🦇🔊"
 slot_delta_to_start_bidding_ms = -12000
+
+[[builders]]
+name = "fast-ordering"
+algo = "ordering-builder"
+discard_txs = true
+sorting = "mev-gas-price"
+failed_order_retries = 1
+drop_failed_orders = true
+build_duration_deadline_ms = 3000
 
 [[relays]]
 name = "ultrasound-local"

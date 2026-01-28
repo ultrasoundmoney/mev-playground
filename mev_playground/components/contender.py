@@ -47,5 +47,6 @@ class ContenderComponent(Component):
             image=self.image,
             static_ip=StaticIPs.CONTENDER,
             command=command,
+            user="",  # Use image default user (don't override with host user)
             # No healthcheck - Contender runs continuously
         )

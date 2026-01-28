@@ -84,8 +84,11 @@ class DockerController:
             shm_size: Shared memory size (e.g., "1g", "512m")
         """
         # Default to host user if not specified to ensure correct file ownership on Linux
+        # Use empty string to explicitly use image default user
         if user is None:
             user = get_host_user()
+        elif user == "":
+            user = None  # Use image default
 
         logger.debug(f"Starting container '{name}' with image '{image}'")
         logger.debug(f"  Static IP: {static_ip}")
