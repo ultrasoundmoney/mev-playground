@@ -74,6 +74,7 @@ class UltrasoundRelayComponent(Component):
             "ADJUSTMENT_MIN_DELTA": "0",
             "SKIP_SIMULATION": "true",
             "DISABLE_BLOCK_SIMULATION": "true",
+            "REG_CACHE_FORCE_REFRESH": "true", # Required for fast start up
 
             # Feature flags
             "FF_ENABLE_TOP_BID_GOSSIP": "false",
