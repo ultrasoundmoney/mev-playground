@@ -15,9 +15,10 @@ from mev_playground.config import (
 class MEVBoostComponent(Component):
     """MEV-Boost sidecar."""
 
-    def __init__(self, data_dir: Path, config: PlaygroundConfig):
+    def __init__(self, data_dir: Path, config: PlaygroundConfig, genesis_timestamp: int):
         super().__init__(data_dir)
         self.config = config
+        self.genesis_timestamp = genesis_timestamp
 
     @property
     def name(self) -> str:
@@ -32,6 +33,7 @@ class MEVBoostComponent(Component):
             "-relay", relay_url,
             "-relay-check",
             "-genesis-fork-version", GENESIS_FORK_VERSION,
+            "-genesis-timestamp", str(self.genesis_timestamp),
             "-request-timeout-getheader", "2900",  # 2.9s timeout (lighthouse max is 3s)
             "-request-timeout-getpayload", "4000",  # 4s timeout for getPayload
             "-request-timeout-regval", "6000",  # 6s timeout for registerValidator

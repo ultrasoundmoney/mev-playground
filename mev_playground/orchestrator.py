@@ -194,7 +194,7 @@ class Playground:
         self._components["lighthouse-vc"] = LighthouseValidatorComponent(
             data_dir, self.config
         )
-        self._components["mev-boost"] = MEVBoostComponent(data_dir, self.config)
+        self._components["mev-boost"] = MEVBoostComponent(data_dir, self.config, genesis_time)
 
         # Block explorer
         self._components["dora"] = DoraComponent(data_dir)
