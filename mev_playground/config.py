@@ -1,8 +1,18 @@
 """Configuration models for MEV Playground."""
 
+import platform
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
+
+
+def get_rbuilder_image() -> str:
+    """Get the rbuilder image for the current architecture."""
+    arch = platform.machine().lower()
+    if arch in ("arm64", "aarch64"):
+        return "ghcr.io/flashbots/rbuilder:latest-linux-arm64"
+    else:
+        return "ghcr.io/flashbots/rbuilder:latest"
 
 
 # Static IP addresses for all components
@@ -128,7 +138,7 @@ class BuilderConfig(BaseModel):
 
     enabled: bool = True  # Enabled by default with rbuilder
     type: str = "rbuilder"  # or "custom" or "none"
-    image: str = "flashbots-rbuilder:local"  # Flashbots rbuilder
+    image: str = Field(default_factory=get_rbuilder_image)
     extra_env: dict[str, str] = Field(default_factory=dict)
 
 

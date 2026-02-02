@@ -55,7 +55,7 @@ def main(ctx, debug):
     "--builder",
     type=click.Choice(["rbuilder", "custom", "none"]),
     default="rbuilder",
-    help="Builder type to use (default: rbuilder with reth-rbuilder:local image)",
+    help="Builder type to use (default: rbuilder with ghcr.io/flashbots/rbuilder image)",
 )
 @click.option(
     "--builder-image",
