@@ -1,8 +1,5 @@
-"""Abstract base class for playground components."""
+"""Base service definition for playground components."""
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 from docker.models.containers import Container
@@ -11,85 +8,140 @@ from docker.types import Mount
 from mev_playground.docker.controller import DockerController
 
 
-@dataclass
-class ContainerConfig:
-    """Configuration for a Docker container."""
+class Service:
+    """A Docker service configuration with lifecycle methods.
 
-    name: str
-    image: str
-    static_ip: str
-    command: list[str] = field(default_factory=list)
-    environment: dict[str, str] = field(default_factory=dict)
-    ports: dict[int, int] = field(default_factory=dict)  # container_port: host_port
-    volumes: dict[str, dict] = field(default_factory=dict)
-    mounts: list[Mount] = field(default_factory=list)
-    healthcheck: Optional[dict] = None
-    depends_on: list[str] = field(default_factory=list)
-    user: Optional[str] = None
-    ipc_mode: Optional[str] = None  # IPC namespace mode (e.g., "shareable", "container:<name>")
-    pid_mode: Optional[str] = None  # PID namespace mode (e.g., "container:<name>")
-    shm_size: Optional[str] = None  # Shared memory size (e.g., "1g", "512m")
+    Uses a builder pattern for configuration:
+        Service("reth")
+            .with_image("ghcr.io/paradigmxyz/reth:latest")
+            .with_static_ip("10.0.0.2")
+            .with_command("node", "--chain", "/genesis/genesis.json")
+            .with_port(8545, 8545)
+    """
 
-
-class Component(ABC):
-    """Abstract base class for all playground components."""
-
-    def __init__(self, data_dir: Path):
-        """Initialize the component.
-
-        Args:
-            data_dir: Base data directory for the playground
-        """
-        self.data_dir = data_dir
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.image: str = ""
+        self.static_ip: str = ""
+        self.command: list[str] = []
+        self.environment: dict[str, str] = {}
+        self.ports: dict[int, int] = {}
+        self.volumes: dict[str, dict] = {}
+        self.mounts: list[Mount] = []
+        self.healthcheck: Optional[dict] = None
+        self.depends_on: list[str] = []
+        self.user: Optional[str] = None
+        self.ipc_mode: Optional[str] = None
+        self.pid_mode: Optional[str] = None
+        self.shm_size: Optional[str] = None
         self._container: Optional[Container] = None
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Return the component name."""
-        pass
+    def __repr__(self) -> str:
+        return f"Service(name={self.name!r}, image={self.image!r})"
 
-    @abstractmethod
-    def get_container_config(self) -> ContainerConfig:
-        """Return the container configuration for this component."""
-        pass
+    # --- Builder methods ---
+
+    def with_image(self, image: str) -> "Service":
+        self.image = image
+        return self
+
+    def with_static_ip(self, static_ip: str) -> "Service":
+        self.static_ip = static_ip
+        return self
+
+    def with_command(self, *args: str) -> "Service":
+        self.command = list(args)
+        return self
+
+    def with_env(self, env: dict[str, str] | None = None, **kwargs: str) -> "Service":
+        if env:
+            self.environment.update(env)
+        self.environment.update(kwargs)
+        return self
+
+    def with_port(self, container_port: int, host_port: int) -> "Service":
+        self.ports[container_port] = host_port
+        return self
+
+    def with_volume(self, name: str, config: dict) -> "Service":
+        self.volumes[name] = config
+        return self
+
+    def with_mount(
+        self,
+        target: str,
+        source: str,
+        type: str = "bind",
+        read_only: bool = False,
+    ) -> "Service":
+        self.mounts.append(Mount(target=target, source=source, type=type, read_only=read_only))
+        return self
+
+    def with_healthcheck(
+        self,
+        test: list[str],
+        interval: int,
+        timeout: int,
+        retries: int,
+        start_period: int,
+    ) -> "Service":
+        self.healthcheck = {
+            "test": test,
+            "interval": interval,
+            "timeout": timeout,
+            "retries": retries,
+            "start_period": start_period,
+        }
+        return self
+
+    def with_depends_on(self, *names: str) -> "Service":
+        self.depends_on = list(names)
+        return self
+
+    def with_user(self, user: str) -> "Service":
+        self.user = user
+        return self
+
+    def with_ipc_mode(self, ipc_mode: str) -> "Service":
+        self.ipc_mode = ipc_mode
+        return self
+
+    def with_pid_mode(self, pid_mode: str) -> "Service":
+        self.pid_mode = pid_mode
+        return self
+
+    def with_shm_size(self, shm_size: str) -> "Service":
+        self.shm_size = shm_size
+        return self
+
+    # --- Lifecycle methods ---
 
     def start(self, controller: DockerController) -> Container:
-        """Start the component container.
-
-        Args:
-            controller: Docker controller instance
-
-        Returns:
-            The started container
-        """
-        config = self.get_container_config()
-
+        """Start this service's container."""
         self._container = controller.run_container(
-            name=config.name,
-            image=config.image,
-            static_ip=config.static_ip,
-            command=config.command if config.command else None,
-            environment=config.environment if config.environment else None,
-            ports=config.ports if config.ports else None,
-            volumes=config.volumes if config.volumes else None,
-            mounts=config.mounts if config.mounts else None,
-            healthcheck=config.healthcheck,
-            depends_on=config.depends_on if config.depends_on else None,
-            user=config.user,
-            ipc_mode=config.ipc_mode,
-            pid_mode=config.pid_mode,
-            shm_size=config.shm_size,
+            name=self.name,
+            image=self.image,
+            static_ip=self.static_ip,
+            command=self.command or None,
+            environment=self.environment or None,
+            ports=self.ports or None,
+            volumes=self.volumes or None,
+            mounts=self.mounts or None,
+            healthcheck=self.healthcheck,
+            depends_on=self.depends_on or None,
+            user=self.user,
+            ipc_mode=self.ipc_mode,
+            pid_mode=self.pid_mode,
+            shm_size=self.shm_size,
         )
-
         return self._container
 
     def stop(self, controller: DockerController) -> None:
-        """Stop the component container."""
+        """Stop this service's container."""
         controller.stop_container(self.name)
 
     def remove(self, controller: DockerController) -> None:
-        """Remove the component container."""
+        """Remove this service's container."""
         controller.remove_container(self.name)
 
     @property
