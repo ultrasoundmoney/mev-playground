@@ -18,18 +18,18 @@ from mev_playground.artifacts import (
     get_genesis_time_from_dir,
 )
 from mev_playground.artifacts.keys import generate_validator_keystores
-from mev_playground.components.reth import RethComponent
+from mev_playground.components.reth import reth_service
 from mev_playground.components.lighthouse import (
-    LighthouseBeaconComponent,
-    LighthouseValidatorComponent,
+    lighthouse_beacon_service,
+    lighthouse_validator_service,
 )
-from mev_playground.components.mev_boost import MEVBoostComponent
-from mev_playground.components.redis import RedisComponent
+from mev_playground.components.mev_boost import mev_boost_service
+from mev_playground.components.redis import redis_service
 from mev_playground.components.postgres import create_relay_databases
-from mev_playground.components.relay import UltrasoundRelayComponent
-from mev_playground.components.rbuilder import RbuilderComponent
-from mev_playground.components.dora import DoraComponent
-from mev_playground.components.contender import ContenderComponent
+from mev_playground.components.relay import relay_service
+from mev_playground.components.rbuilder import rbuilder_service
+from mev_playground.components.dora import dora_service
+from mev_playground.components.contender import contender_service
 
 
 console = Console()
@@ -187,28 +187,27 @@ class Playground:
         genesis_validators_root = get_genesis_validators_root_from_dir(beacon_dir)
 
         # Core Ethereum stack
-        self._components["reth"] = RethComponent(data_dir, self.config)
-        self._components["lighthouse-bn"] = LighthouseBeaconComponent(
+        self._components["reth"] = reth_service(data_dir, self.config)
+        self._components["lighthouse-bn"] = lighthouse_beacon_service(
             data_dir, self.config, enable_mev_boost=True
         )
-        self._components["lighthouse-vc"] = LighthouseValidatorComponent(
+        self._components["lighthouse-vc"] = lighthouse_validator_service(
             data_dir, self.config
         )
-        self._components["mev-boost"] = MEVBoostComponent(data_dir, self.config, genesis_time)
+        self._components["mev-boost"] = mev_boost_service(self.config, genesis_time)
 
         # Block explorer
-        self._components["dora"] = DoraComponent(data_dir)
+        self._components["dora"] = dora_service(data_dir)
 
         # Relay infrastructure
-        self._components["redis"] = RedisComponent(data_dir)
+        self._components["redis"] = redis_service()
         mevdb, localdb, globaldb = create_relay_databases(data_dir)
         self._components["mevdb"] = mevdb
         self._components["localdb"] = localdb
         self._components["globaldb"] = globaldb
 
         # Relay
-        self._components["mev-ultrasound-relay"] = UltrasoundRelayComponent(
-            data_dir,
+        self._components["mev-ultrasound-relay"] = relay_service(
             self.config,
             genesis_time,
             genesis_validators_root,
@@ -216,17 +215,16 @@ class Playground:
 
         # Builder
         if self.config.mev.builder.enabled and self.config.mev.builder.type in ("rbuilder", "custom"):
-            reth_component = self._components["reth"]
-            self._components["rbuilder"] = RbuilderComponent(
+            reth_data_path = data_dir / "data" / "reth"
+            self._components["rbuilder"] = rbuilder_service(
                 data_dir,
                 self.config,
-                reth_data_path=reth_component.data_path,
+                reth_data_path=reth_data_path,
             )
 
         # Contender tx spammer
         if self.with_contender:
-            self._components["contender"] = ContenderComponent(
-                data_dir,
+            self._components["contender"] = contender_service(
                 tps=self.contender_tps,
                 image=self.config.contender.image,
                 extra_args=self.config.contender.extra_args,
@@ -388,8 +386,7 @@ class Playground:
         self.controller.pull_image(self.config.contender.image)
 
         # Create and start contender
-        contender = ContenderComponent(
-            self.config.data_dir,
+        contender = contender_service(
             tps=tps,
             image=self.config.contender.image,
             extra_args=self.config.contender.extra_args,

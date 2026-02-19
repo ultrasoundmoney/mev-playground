@@ -1,8 +1,6 @@
-"""Abstract base class for playground components."""
+"""Base service definition for playground components."""
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 from docker.models.containers import Container
@@ -12,8 +10,8 @@ from mev_playground.docker.controller import DockerController
 
 
 @dataclass
-class ContainerConfig:
-    """Configuration for a Docker container."""
+class Service:
+    """A Docker service configuration with lifecycle methods."""
 
     name: str
     image: str
@@ -30,66 +28,34 @@ class ContainerConfig:
     pid_mode: Optional[str] = None  # PID namespace mode (e.g., "container:<name>")
     shm_size: Optional[str] = None  # Shared memory size (e.g., "1g", "512m")
 
-
-class Component(ABC):
-    """Abstract base class for all playground components."""
-
-    def __init__(self, data_dir: Path):
-        """Initialize the component.
-
-        Args:
-            data_dir: Base data directory for the playground
-        """
-        self.data_dir = data_dir
-        self._container: Optional[Container] = None
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Return the component name."""
-        pass
-
-    @abstractmethod
-    def get_container_config(self) -> ContainerConfig:
-        """Return the container configuration for this component."""
-        pass
+    _container: Optional[Container] = field(default=None, init=False, repr=False)
 
     def start(self, controller: DockerController) -> Container:
-        """Start the component container.
-
-        Args:
-            controller: Docker controller instance
-
-        Returns:
-            The started container
-        """
-        config = self.get_container_config()
-
+        """Start this service's container."""
         self._container = controller.run_container(
-            name=config.name,
-            image=config.image,
-            static_ip=config.static_ip,
-            command=config.command if config.command else None,
-            environment=config.environment if config.environment else None,
-            ports=config.ports if config.ports else None,
-            volumes=config.volumes if config.volumes else None,
-            mounts=config.mounts if config.mounts else None,
-            healthcheck=config.healthcheck,
-            depends_on=config.depends_on if config.depends_on else None,
-            user=config.user,
-            ipc_mode=config.ipc_mode,
-            pid_mode=config.pid_mode,
-            shm_size=config.shm_size,
+            name=self.name,
+            image=self.image,
+            static_ip=self.static_ip,
+            command=self.command or None,
+            environment=self.environment or None,
+            ports=self.ports or None,
+            volumes=self.volumes or None,
+            mounts=self.mounts or None,
+            healthcheck=self.healthcheck,
+            depends_on=self.depends_on or None,
+            user=self.user,
+            ipc_mode=self.ipc_mode,
+            pid_mode=self.pid_mode,
+            shm_size=self.shm_size,
         )
-
         return self._container
 
     def stop(self, controller: DockerController) -> None:
-        """Stop the component container."""
+        """Stop this service's container."""
         controller.stop_container(self.name)
 
     def remove(self, controller: DockerController) -> None:
-        """Remove the component container."""
+        """Remove this service's container."""
         controller.remove_container(self.name)
 
     @property
