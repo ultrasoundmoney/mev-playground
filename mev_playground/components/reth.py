@@ -3,10 +3,12 @@
 from pathlib import Path
 
 from mev_playground.service import Service
-from mev_playground.config import StaticIPs, StaticPorts, PlaygroundConfig
+from mev_playground.config import StaticIPs, StaticPorts
+
+DEFAULT_IMAGE = "ghcr.io/paradigmxyz/reth:v1.8.2"
 
 
-def reth_service(data_dir: Path, config: PlaygroundConfig) -> Service:
+def reth_service(data_dir: Path) -> Service:
     """Create a Reth execution client service."""
     data_path = data_dir / "data" / "reth"
     artifacts_path = data_dir / "artifacts"
@@ -40,7 +42,7 @@ def reth_service(data_dir: Path, config: PlaygroundConfig) -> Service:
 
     return (
         Service("reth")
-        .with_image(config.execution.image)
+        .with_image(DEFAULT_IMAGE)
         .with_static_ip(StaticIPs.RETH)
         .with_command(*command)
         .with_port(StaticPorts.RETH_HTTP, StaticPorts.RETH_HTTP)

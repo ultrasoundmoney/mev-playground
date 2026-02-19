@@ -4,13 +4,14 @@ from mev_playground.service import Service
 from mev_playground.config import (
     StaticIPs,
     StaticPorts,
-    PlaygroundConfig,
     DEFAULT_MEV_PUBKEY,
     GENESIS_FORK_VERSION,
 )
 
+DEFAULT_IMAGE = "flashbots/mev-boost:latest"
 
-def mev_boost_service(config: PlaygroundConfig, genesis_timestamp: int) -> Service:
+
+def mev_boost_service(genesis_timestamp: int) -> Service:
     """Create a MEV-Boost sidecar service."""
     relay_url = f"http://{DEFAULT_MEV_PUBKEY}@{StaticIPs.RELAY}:{StaticPorts.RELAY_HTTP}"
 
@@ -28,7 +29,7 @@ def mev_boost_service(config: PlaygroundConfig, genesis_timestamp: int) -> Servi
 
     return (
         Service("mev-boost")
-        .with_image(config.mev.boost.image)
+        .with_image(DEFAULT_IMAGE)
         .with_static_ip(StaticIPs.MEV_BOOST)
         .with_command(*command)
         .with_port(StaticPorts.MEV_BOOST, StaticPorts.MEV_BOOST)

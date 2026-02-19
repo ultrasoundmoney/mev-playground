@@ -3,16 +3,13 @@
 from pathlib import Path
 
 from mev_playground.service import Service
-from mev_playground.config import (
-    StaticIPs,
-    StaticPorts,
-    PlaygroundConfig,
-)
+from mev_playground.config import StaticIPs, StaticPorts
+
+DEFAULT_IMAGE = "sigp/lighthouse:v8.0.0-rc.2"
 
 
 def lighthouse_beacon_service(
     data_dir: Path,
-    config: PlaygroundConfig,
     enable_mev_boost: bool = True,
 ) -> Service:
     """Create a Lighthouse beacon node service."""
@@ -60,7 +57,7 @@ def lighthouse_beacon_service(
 
     return (
         Service("lighthouse-bn")
-        .with_image(config.consensus.image)
+        .with_image(DEFAULT_IMAGE)
         .with_static_ip(StaticIPs.LIGHTHOUSE_BN)
         .with_command(*command)
         .with_port(StaticPorts.LIGHTHOUSE_HTTP, StaticPorts.LIGHTHOUSE_HTTP)
@@ -81,7 +78,7 @@ def lighthouse_beacon_service(
     )
 
 
-def lighthouse_validator_service(data_dir: Path, config: PlaygroundConfig) -> Service:
+def lighthouse_validator_service(data_dir: Path) -> Service:
     """Create a Lighthouse validator client service."""
     data_path = data_dir / "data" / "lighthouse" / "validator"
     artifacts_path = data_dir / "artifacts"
@@ -107,7 +104,7 @@ def lighthouse_validator_service(data_dir: Path, config: PlaygroundConfig) -> Se
 
     return (
         Service("lighthouse-vc")
-        .with_image(config.consensus.image)
+        .with_image(DEFAULT_IMAGE)
         .with_static_ip(StaticIPs.LIGHTHOUSE_VC)
         .with_command(*command)
         .with_mount("/config", str(artifacts_path / "beacon"), read_only=True)

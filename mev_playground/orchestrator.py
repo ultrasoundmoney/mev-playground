@@ -7,7 +7,13 @@ from typing import Optional
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from mev_playground.config import PlaygroundConfig, DEFAULT_DATA_DIR
+from mev_playground.config import (
+    PlaygroundConfig,
+    DEFAULT_DATA_DIR,
+    DEFAULT_MNEMONIC,
+    FAR_FUTURE_EPOCH,
+    get_rbuilder_image,
+)
 from mev_playground.docker.controller import DockerController
 from mev_playground.docker.network import NetworkManager
 from mev_playground.artifacts import (
@@ -19,20 +25,28 @@ from mev_playground.artifacts import (
 )
 from mev_playground.artifacts.keys import generate_validator_keystores
 from mev_playground.components.reth import reth_service
+from mev_playground.components.reth import DEFAULT_IMAGE as RETH_IMAGE
 from mev_playground.components.lighthouse import (
     lighthouse_beacon_service,
     lighthouse_validator_service,
 )
+from mev_playground.components.lighthouse import DEFAULT_IMAGE as LIGHTHOUSE_IMAGE
 from mev_playground.components.mev_boost import mev_boost_service
+from mev_playground.components.mev_boost import DEFAULT_IMAGE as MEV_BOOST_IMAGE
 from mev_playground.components.redis import redis_service
 from mev_playground.components.postgres import create_relay_databases
 from mev_playground.components.relay import relay_service
 from mev_playground.components.rbuilder import rbuilder_service
 from mev_playground.components.dora import dora_service
 from mev_playground.components.contender import contender_service
+from mev_playground.components.contender import DEFAULT_IMAGE as CONTENDER_IMAGE
 
 
 console = Console()
+
+
+NUM_VALIDATORS = 100
+GENESIS_GENERATOR_IMAGE = "ethpandaops/ethereum-genesis-generator:5.2.0"
 
 
 class Playground:
@@ -40,7 +54,6 @@ class Playground:
 
     def __init__(
         self,
-        config: Optional[PlaygroundConfig] = None,
         data_dir: Optional[Path] = None,
         relay_image: Optional[str] = None,
         builder: str = "rbuilder",
@@ -51,7 +64,6 @@ class Playground:
         """Initialize the playground.
 
         Args:
-            config: Playground configuration
             data_dir: Override data directory
             relay_image: Override relay image
             builder: Builder type ("rbuilder", "custom", or "none")
@@ -59,23 +71,17 @@ class Playground:
             with_contender: Start Contender tx spammer with the playground
             contender_tps: Contender transactions per second
         """
-        self.config = config or PlaygroundConfig()
+        self.config = PlaygroundConfig(
+            data_dir=data_dir or DEFAULT_DATA_DIR,
+            relay_image=relay_image or "turbo-relay-combined:latest",
+            builder_enabled=builder != "none",
+            builder_image=(
+                builder_image if builder == "custom" and builder_image
+                else get_rbuilder_image()
+            ),
+        )
         self.with_contender = with_contender
         self.contender_tps = contender_tps
-
-        if data_dir:
-            self.config.data_dir = data_dir
-
-        if relay_image:
-            self.config.mev.relay.image = relay_image
-
-        if builder == "none":
-            self.config.mev.builder.enabled = False
-        elif builder == "custom" and builder_image:
-            self.config.mev.builder.type = "custom"
-            self.config.mev.builder.image = builder_image
-        elif builder == "rbuilder":
-            self.config.mev.builder.type = "rbuilder"
 
         self.controller = DockerController()
         self.network_manager = NetworkManager(self.controller.client)
@@ -118,18 +124,18 @@ class Playground:
         generate_jwt_secret(jwt_path)
         console.print("  JWT secret generated")
 
-        # Create genesis generator config from playground config
+        # Create genesis generator config
         genesis_config = GenesisGeneratorConfig(
-            chain_id=self.config.network.chain_id,
-            preset=self.config.network.preset,
-            genesis_delay=self.config.network.genesis_delay,
-            seconds_per_slot=self.config.network.seconds_per_slot,
-            slot_duration_ms=self.config.network.seconds_per_slot * 1000,
-            num_validators=self.config.validators.count,
-            mnemonic=self.config.network.mnemonic,
-            electra_fork_epoch=self.config.network.electra_fork_epoch,
-            fulu_fork_epoch=self.config.network.fulu_fork_epoch,
-            genesis_generator_image=self.config.network.genesis_generator_image,
+            chain_id=3151908,
+            preset="mainnet",
+            genesis_delay=0,
+            seconds_per_slot=12,
+            slot_duration_ms=12000,
+            num_validators=NUM_VALIDATORS,
+            mnemonic=DEFAULT_MNEMONIC,
+            electra_fork_epoch=0,
+            fulu_fork_epoch=FAR_FUTURE_EPOCH,
+            genesis_generator_image=GENESIS_GENERATOR_IMAGE,
         )
 
         # Generate EL and CL genesis using Docker
@@ -143,18 +149,18 @@ class Playground:
         # Copy EL genesis to main artifacts dir (for components that expect it there)
         shutil.copy(genesis_data.el_genesis_path, genesis_path)
 
-        console.print(f"  Genesis generated with {self.config.validators.count} validators")
+        console.print(f"  Genesis generated with {NUM_VALIDATORS} validators")
         console.print(f"  Genesis time: {genesis_data.genesis_time}")
 
         # Generate validator keystores using eth2-val-tools (same mnemonic as genesis)
         console.print("  Generating validator keystores...")
         generate_validator_keystores(
             output_dir=validators_dir,
-            mnemonic=self.config.network.mnemonic,
-            count=self.config.validators.count,
+            mnemonic=DEFAULT_MNEMONIC,
+            count=NUM_VALIDATORS,
             verbose=False,
         )
-        console.print(f"  {self.config.validators.count} validator keystores generated")
+        console.print(f"  {NUM_VALIDATORS} validator keystores generated")
         console.print(f"  Genesis validators root: {genesis_data.genesis_validators_root}")
 
         # Copy JWT to beacon dir for Lighthouse
@@ -163,18 +169,18 @@ class Playground:
     def _collect_images(self) -> list[str]:
         """Collect all Docker images that need to be pulled."""
         images = [
-            self.config.execution.image,
-            self.config.consensus.image,
-            self.config.mev.boost.image,
+            RETH_IMAGE,
+            LIGHTHOUSE_IMAGE,
+            MEV_BOOST_IMAGE,
             "pk910/dora-the-explorer:latest",
-            self.config.mev.relay.image,
+            self.config.relay_image,
             "redis:7-alpine",
             "postgres:15-alpine",
         ]
-        if self.config.mev.builder.enabled:
-            images.append(self.config.mev.builder.image)
+        if self.config.builder_enabled:
+            images.append(self.config.builder_image)
         if self.with_contender:
-            images.append(self.config.contender.image)
+            images.append(CONTENDER_IMAGE)
         return images
 
     def _create_components(self) -> None:
@@ -187,14 +193,12 @@ class Playground:
         genesis_validators_root = get_genesis_validators_root_from_dir(beacon_dir)
 
         # Core Ethereum stack
-        self._components["reth"] = reth_service(data_dir, self.config)
+        self._components["reth"] = reth_service(data_dir)
         self._components["lighthouse-bn"] = lighthouse_beacon_service(
-            data_dir, self.config, enable_mev_boost=True
+            data_dir, enable_mev_boost=True
         )
-        self._components["lighthouse-vc"] = lighthouse_validator_service(
-            data_dir, self.config
-        )
-        self._components["mev-boost"] = mev_boost_service(self.config, genesis_time)
+        self._components["lighthouse-vc"] = lighthouse_validator_service(data_dir)
+        self._components["mev-boost"] = mev_boost_service(genesis_time)
 
         # Block explorer
         self._components["dora"] = dora_service(data_dir)
@@ -208,17 +212,17 @@ class Playground:
 
         # Relay
         self._components["mev-ultrasound-relay"] = relay_service(
-            self.config,
+            self.config.relay_image,
             genesis_time,
             genesis_validators_root,
         )
 
         # Builder
-        if self.config.mev.builder.enabled and self.config.mev.builder.type in ("rbuilder", "custom"):
+        if self.config.builder_enabled:
             reth_data_path = data_dir / "data" / "reth"
             self._components["rbuilder"] = rbuilder_service(
                 data_dir,
-                self.config,
+                image=self.config.builder_image,
                 reth_data_path=reth_data_path,
             )
 
@@ -226,8 +230,6 @@ class Playground:
         if self.with_contender:
             self._components["contender"] = contender_service(
                 tps=self.contender_tps,
-                image=self.config.contender.image,
-                extra_args=self.config.contender.extra_args,
             )
 
     def start(self) -> None:
@@ -272,7 +274,7 @@ class Playground:
             "globaldb",
             "mev-ultrasound-relay",
         ]
-        if self.config.mev.builder.enabled:
+        if self.config.builder_enabled:
             startup_order.append("rbuilder")
 
         # Clean up any existing containers from previous runs
@@ -382,15 +384,11 @@ class Playground:
             raise RuntimeError("Playground is not running. Start it first with 'mev-playground start'")
 
         # Pull image if needed
-        console.print(f"Pulling {self.config.contender.image}...")
-        self.controller.pull_image(self.config.contender.image)
+        console.print(f"Pulling {CONTENDER_IMAGE}...")
+        self.controller.pull_image(CONTENDER_IMAGE)
 
         # Create and start contender
-        contender = contender_service(
-            tps=tps,
-            image=self.config.contender.image,
-            extra_args=self.config.contender.extra_args,
-        )
+        contender = contender_service(tps=tps)
 
         # Remove existing contender container if any
         self.controller.remove_container("contender", force=True)

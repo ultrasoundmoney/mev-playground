@@ -3,11 +3,12 @@
 from mev_playground.service import Service
 from mev_playground.config import StaticIPs, StaticPorts
 
+DEFAULT_IMAGE = "flashbots/contender:latest"
+
 
 def contender_service(
     tps: int = 20,
-    extra_args: list[str] | None = None,
-    image: str = "flashbots/contender:latest",
+    image: str = DEFAULT_IMAGE,
 ) -> Service:
     """Create a Contender transaction spammer service."""
     command = [
@@ -16,9 +17,8 @@ def contender_service(
         "--min-balance", "10 ether",
         "--tps", str(tps),
         "--forever",
+        "transfers",
     ]
-    command.extend(extra_args or [])
-    command.append("transfers")
 
     return (
         Service("contender")

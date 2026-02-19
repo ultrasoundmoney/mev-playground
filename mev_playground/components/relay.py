@@ -4,7 +4,6 @@ from mev_playground.service import Service
 from mev_playground.config import (
     StaticIPs,
     StaticPorts,
-    PlaygroundConfig,
     DEFAULT_MEV_SECRET_KEY,
     GENESIS_FORK_VERSION,
     BELLATRIX_FORK_VERSION,
@@ -16,7 +15,7 @@ from mev_playground.config import (
 
 
 def relay_service(
-    config: PlaygroundConfig,
+    image: str,
     genesis_timestamp: int,
     genesis_validators_root: str,
 ) -> Service:
@@ -87,12 +86,9 @@ def relay_service(
         "TELEGRAM_CHANNEL_ID": "",
     }
 
-    # Add any extra environment variables from config
-    environment.update(config.mev.relay.extra_env)
-
     return (
         Service("mev-ultrasound-relay")
-        .with_image(config.mev.relay.image)
+        .with_image(image)
         .with_static_ip(StaticIPs.RELAY)
         .with_env(environment)
         .with_port(StaticPorts.RELAY_HTTP, StaticPorts.RELAY_HTTP)

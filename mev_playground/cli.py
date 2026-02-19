@@ -9,8 +9,8 @@ from rich.console import Console
 from rich.table import Table
 from web3 import Web3
 
-from mev_playground.config import PlaygroundConfig, DEFAULT_DATA_DIR
-from mev_playground.orchestrator import Playground
+from mev_playground.config import DEFAULT_DATA_DIR, get_rbuilder_image
+from mev_playground.orchestrator import Playground, NUM_VALIDATORS
 
 # Default rbuilder extra_data (🦇🔊 = "ultrasound")
 DEFAULT_EXTRA_DATA = "🦇🔊"
@@ -211,30 +211,29 @@ def logs(component, tail, data_dir):
 @main.command()
 def info():
     """Show playground configuration and endpoints."""
-    config = PlaygroundConfig()
+    from mev_playground.config import StaticIPs
+    from mev_playground.components.reth import DEFAULT_IMAGE as RETH_IMAGE
+    from mev_playground.components.lighthouse import DEFAULT_IMAGE as LIGHTHOUSE_IMAGE
+    from mev_playground.components.mev_boost import DEFAULT_IMAGE as MEV_BOOST_IMAGE
 
     console.print("[bold]MEV Playground Configuration[/bold]\n")
 
     console.print("[cyan]Network:[/cyan]")
-    console.print(f"  Chain ID:         {config.network.chain_id}")
-    console.print(f"  Seconds per slot: {config.network.seconds_per_slot}")
-    console.print(f"  Genesis delay:    {config.network.genesis_delay}s")
+    console.print(f"  Chain ID:         3151908")
+    console.print(f"  Seconds per slot: 12")
+    console.print(f"  Validators:       {NUM_VALIDATORS}")
 
     console.print("\n[cyan]Components:[/cyan]")
-    console.print(f"  Execution:  {config.execution.image}")
-    console.print(f"  Consensus:  {config.consensus.image}")
-    console.print(f"  Validators: {config.validators.count}")
+    console.print(f"  Execution:  {RETH_IMAGE}")
+    console.print(f"  Consensus:  {LIGHTHOUSE_IMAGE}")
+    console.print(f"  Relay:      turbo-relay-combined:latest")
+    console.print(f"  Builder:    {get_rbuilder_image()}")
+    console.print(f"  Boost:      {MEV_BOOST_IMAGE}")
 
-    console.print("\n[cyan]MEV Stack:[/cyan]")
-    console.print(f"  Relay:   {config.mev.relay.image}")
-    console.print(f"  Builder: {config.mev.builder.image}")
-    console.print(f"  Boost:   {config.mev.boost.image}")
-
-    console.print("\n[cyan]Data Directory:[/cyan]")
-    console.print(f"  {config.data_dir}")
+    console.print(f"\n[cyan]Data Directory:[/cyan]")
+    console.print(f"  {DEFAULT_DATA_DIR}")
 
     console.print("\n[cyan]Static IPs:[/cyan]")
-    from mev_playground.config import StaticIPs
     console.print(f"  Reth:         {StaticIPs.RETH}")
     console.print(f"  Lighthouse:   {StaticIPs.LIGHTHOUSE_BN}")
     console.print(f"  MEV-Boost:    {StaticIPs.MEV_BOOST}")

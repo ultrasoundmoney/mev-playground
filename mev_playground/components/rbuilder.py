@@ -7,7 +7,6 @@ from mev_playground.service import Service
 from mev_playground.config import (
     StaticIPs,
     StaticPorts,
-    PlaygroundConfig,
     DEFAULT_MEV_SECRET_KEY,
 )
 
@@ -63,7 +62,7 @@ def _generate_rbuilder_config(coinbase_secret_key: str) -> str:
 
 def rbuilder_service(
     data_dir: Path,
-    config: PlaygroundConfig,
+    image: str,
     reth_data_path: Path,
     coinbase_secret_key: str = "0x" + "01" * 32,
 ) -> Service:
@@ -77,11 +76,10 @@ def rbuilder_service(
 
     return (
         Service("rbuilder")
-        .with_image(config.mev.builder.image)
+        .with_image(image)
         .with_static_ip(StaticIPs.RBUILDER)
         .with_command("run", "/config/rbuilder.toml")
         .with_env(
-            dict(config.mev.builder.extra_env),
             COINBASE_SECRET_KEY=coinbase_secret_key,
             RELAY_SECRET_KEY=DEFAULT_MEV_SECRET_KEY,
         )
