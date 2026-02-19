@@ -20,10 +20,10 @@ def contender_service(
     command.extend(extra_args or [])
     command.append("transfers")
 
-    return Service(
-        name="contender",
-        image=image,
-        static_ip=StaticIPs.CONTENDER,
-        command=command,
-        user="",  # Use image default user (don't override with host user)
+    return (
+        Service("contender")
+        .with_image(image)
+        .with_static_ip(StaticIPs.CONTENDER)
+        .with_command(*command)
+        .with_user("")
     )
