@@ -1,9 +1,8 @@
 """Lighthouse consensus client services."""
 
 from pathlib import Path
-from docker.types import Mount
 
-from mev_playground.components.base import Service
+from mev_playground.service import Service
 from mev_playground.config import (
     StaticIPs,
     StaticPorts,
@@ -59,39 +58,26 @@ def lighthouse_beacon_service(
             "--builder-header-timeout", "3000",  # 3s max allowed by lighthouse
         ])
 
-    return Service(
-        name="lighthouse-bn",
-        image=config.consensus.image,
-        static_ip=StaticIPs.LIGHTHOUSE_BN,
-        command=command,
-        ports={
-            StaticPorts.LIGHTHOUSE_HTTP: StaticPorts.LIGHTHOUSE_HTTP,
-            StaticPorts.LIGHTHOUSE_METRICS: StaticPorts.LIGHTHOUSE_METRICS,
-        },
-        mounts=[
-            Mount(
-                target="/data",
-                source=str(data_path),
-                type="bind",
-            ),
-            Mount(
-                target="/config",
-                source=str(artifacts_path / "beacon"),
-                type="bind",
-                read_only=True,
-            ),
-        ],
-        healthcheck={
-            "test": [
+    return (
+        Service("lighthouse-bn")
+        .with_image(config.consensus.image)
+        .with_static_ip(StaticIPs.LIGHTHOUSE_BN)
+        .with_command(*command)
+        .with_port(StaticPorts.LIGHTHOUSE_HTTP, StaticPorts.LIGHTHOUSE_HTTP)
+        .with_port(StaticPorts.LIGHTHOUSE_METRICS, StaticPorts.LIGHTHOUSE_METRICS)
+        .with_mount("/data", str(data_path))
+        .with_mount("/config", str(artifacts_path / "beacon"), read_only=True)
+        .with_healthcheck(
+            test=[
                 "CMD-SHELL",
                 f"bash -c 'echo >/dev/tcp/localhost/{StaticPorts.LIGHTHOUSE_HTTP}' 2>/dev/null || exit 1",
             ],
-            "interval": 5000000000,
-            "timeout": 3000000000,
-            "retries": 20,
-            "start_period": 30000000000,
-        },
-        depends_on=["reth"],
+            interval=5000000000,
+            timeout=3000000000,
+            retries=20,
+            start_period=30000000000,
+        )
+        .with_depends_on("reth")
     )
 
 
@@ -119,33 +105,22 @@ def lighthouse_validator_service(data_dir: Path, config: PlaygroundConfig) -> Se
         "--prefer-builder-proposals",
     ]
 
-    return Service(
-        name="lighthouse-vc",
-        image=config.consensus.image,
-        static_ip=StaticIPs.LIGHTHOUSE_VC,
-        command=command,
-        mounts=[
-            Mount(
-                target="/config",
-                source=str(artifacts_path / "beacon"),
-                type="bind",
-                read_only=True,
-            ),
-            Mount(
-                target="/data/validators",
-                source=str(artifacts_path / "validators"),
-                type="bind",
-            ),
-        ],
-        healthcheck={
-            "test": [
+    return (
+        Service("lighthouse-vc")
+        .with_image(config.consensus.image)
+        .with_static_ip(StaticIPs.LIGHTHOUSE_VC)
+        .with_command(*command)
+        .with_mount("/config", str(artifacts_path / "beacon"), read_only=True)
+        .with_mount("/data/validators", str(artifacts_path / "validators"))
+        .with_healthcheck(
+            test=[
                 "CMD-SHELL",
                 "bash -c 'echo >/dev/tcp/localhost/5062' 2>/dev/null || exit 1",
             ],
-            "interval": 5000000000,
-            "timeout": 3000000000,
-            "retries": 10,
-            "start_period": 10000000000,
-        },
-        depends_on=["lighthouse-bn"],
+            interval=5000000000,
+            timeout=3000000000,
+            retries=10,
+            start_period=10000000000,
+        )
+        .with_depends_on("lighthouse-bn")
     )

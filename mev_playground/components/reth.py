@@ -1,9 +1,8 @@
 """Reth execution client service."""
 
 from pathlib import Path
-from docker.types import Mount
 
-from mev_playground.components.base import Service
+from mev_playground.service import Service
 from mev_playground.config import StaticIPs, StaticPorts, PlaygroundConfig
 
 
@@ -39,37 +38,24 @@ def reth_service(data_dir: Path, config: PlaygroundConfig) -> Service:
         "--db.exclusive", "false",
     ]
 
-    return Service(
-        name="reth",
-        image=config.execution.image,
-        static_ip=StaticIPs.RETH,
-        command=command,
-        ports={
-            StaticPorts.RETH_HTTP: StaticPorts.RETH_HTTP,
-            StaticPorts.RETH_WS: StaticPorts.RETH_WS,
-            StaticPorts.RETH_AUTH: StaticPorts.RETH_AUTH,
-        },
-        mounts=[
-            Mount(
-                target="/data",
-                source=str(data_path),
-                type="bind",
-            ),
-            Mount(
-                target="/genesis",
-                source=str(artifacts_path),
-                type="bind",
-                read_only=True,
-            ),
-        ],
-        healthcheck={
-            "test": [
+    return (
+        Service("reth")
+        .with_image(config.execution.image)
+        .with_static_ip(StaticIPs.RETH)
+        .with_command(*command)
+        .with_port(StaticPorts.RETH_HTTP, StaticPorts.RETH_HTTP)
+        .with_port(StaticPorts.RETH_WS, StaticPorts.RETH_WS)
+        .with_port(StaticPorts.RETH_AUTH, StaticPorts.RETH_AUTH)
+        .with_mount("/data", str(data_path))
+        .with_mount("/genesis", str(artifacts_path), read_only=True)
+        .with_healthcheck(
+            test=[
                 "CMD-SHELL",
                 f"bash -c 'echo >/dev/tcp/localhost/{StaticPorts.RETH_HTTP}' 2>/dev/null || exit 1",
             ],
-            "interval": 5000000000,  # 5s in nanoseconds
-            "timeout": 3000000000,  # 3s
-            "retries": 10,
-            "start_period": 10000000000,  # 10s
-        },
+            interval=5000000000,
+            timeout=3000000000,
+            retries=10,
+            start_period=10000000000,
+        )
     )

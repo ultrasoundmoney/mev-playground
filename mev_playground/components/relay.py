@@ -1,6 +1,6 @@
 """Ultrasound relay service."""
 
-from mev_playground.components.base import Service
+from mev_playground.service import Service
 from mev_playground.config import (
     StaticIPs,
     StaticPorts,
@@ -90,24 +90,22 @@ def relay_service(
     # Add any extra environment variables from config
     environment.update(config.mev.relay.extra_env)
 
-    return Service(
-        name="mev-ultrasound-relay",
-        image=config.mev.relay.image,
-        static_ip=StaticIPs.RELAY,
-        environment=environment,
-        ports={
-            StaticPorts.RELAY_HTTP: StaticPorts.RELAY_HTTP,
-        },
-        healthcheck={
-            "test": [
+    return (
+        Service("mev-ultrasound-relay")
+        .with_image(config.mev.relay.image)
+        .with_static_ip(StaticIPs.RELAY)
+        .with_env(environment)
+        .with_port(StaticPorts.RELAY_HTTP, StaticPorts.RELAY_HTTP)
+        .with_healthcheck(
+            test=[
                 "CMD-SHELL",
                 f"bash -c 'echo >/dev/tcp/localhost/{StaticPorts.RELAY_HTTP}' 2>/dev/null || exit 1",
             ],
-            "interval": 5000000000,  # 5 seconds
-            "timeout": 3000000000,   # 3 seconds
-            "retries": 60,           # More retries to allow for genesis wait
-            "start_period": 10000000000,  # 60 seconds to allow genesis time to pass
-        },
-        depends_on=["redis", "mevdb", "localdb", "globaldb", "lighthouse-bn", "reth"],
-        user="root",  # Relay uses supervisord which requires root to drop privileges
+            interval=5000000000,
+            timeout=3000000000,
+            retries=60,
+            start_period=10000000000,
+        )
+        .with_depends_on("redis", "mevdb", "localdb", "globaldb", "lighthouse-bn", "reth")
+        .with_user("root")
     )

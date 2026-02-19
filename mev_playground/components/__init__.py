@@ -1,6 +1,6 @@
 """Service definitions for MEV Playground."""
 
-from mev_playground.components.base import Service
+from mev_playground.service import Service
 from mev_playground.components.reth import reth_service
 from mev_playground.components.lighthouse import lighthouse_beacon_service, lighthouse_validator_service
 from mev_playground.components.mev_boost import mev_boost_service

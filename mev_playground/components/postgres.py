@@ -1,9 +1,8 @@
 """PostgreSQL service for relay databases."""
 
 from pathlib import Path
-from docker.types import Mount
 
-from mev_playground.components.base import Service
+from mev_playground.service import Service
 from mev_playground.config import StaticIPs
 
 
@@ -18,29 +17,23 @@ def postgres_service(data_dir: Path, instance_name: str, static_ip: str) -> Serv
     data_path = data_dir / "data" / "postgres" / instance_name
     data_path.mkdir(parents=True, exist_ok=True)
 
-    return Service(
-        name=instance_name,
-        image="postgres:15-alpine",
-        static_ip=static_ip,
-        environment={
-            "POSTGRES_USER": "postgres",
-            "POSTGRES_PASSWORD": "postgres",
-            "POSTGRES_DB": "postgres",
-        },
-        mounts=[
-            Mount(
-                target="/var/lib/postgresql/data",
-                source=str(data_path),
-                type="bind",
-            ),
-        ],
-        healthcheck={
-            "test": ["CMD-SHELL", "pg_isready -U postgres"],
-            "interval": 3000000000,
-            "timeout": 2000000000,
-            "retries": 10,
-            "start_period": 5000000000,
-        },
+    return (
+        Service(instance_name)
+        .with_image("postgres:15-alpine")
+        .with_static_ip(static_ip)
+        .with_env(
+            POSTGRES_USER="postgres",
+            POSTGRES_PASSWORD="postgres",
+            POSTGRES_DB="postgres",
+        )
+        .with_mount("/var/lib/postgresql/data", str(data_path))
+        .with_healthcheck(
+            test=["CMD-SHELL", "pg_isready -U postgres"],
+            interval=3000000000,
+            timeout=2000000000,
+            retries=10,
+            start_period=5000000000,
+        )
     )
 
 
