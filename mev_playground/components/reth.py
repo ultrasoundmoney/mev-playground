@@ -1,109 +1,63 @@
-"""Reth execution client component."""
+"""Reth execution client service."""
 
 from pathlib import Path
-from docker.types import Mount
 
-from mev_playground.components.base import Component, ContainerConfig
-from mev_playground.config import StaticIPs, StaticPorts, PlaygroundConfig
+from mev_playground.service import Service
+from mev_playground.config import StaticIPs, StaticPorts
+
+DEFAULT_IMAGE = "ghcr.io/paradigmxyz/reth:v1.8.2"
 
 
-class RethComponent(Component):
-    """Reth execution client."""
+def reth_service(data_dir: Path) -> Service:
+    """Create a Reth execution client service."""
+    data_path = data_dir / "data" / "reth"
+    artifacts_path = data_dir / "artifacts"
+    data_path.mkdir(parents=True, exist_ok=True)
 
-    def __init__(self, data_dir: Path, config: PlaygroundConfig):
-        super().__init__(data_dir)
-        self.config = config
-        self._data_path = data_dir / "data" / "reth"
-        self._artifacts_path = data_dir / "artifacts"
+    command = [
+        "node",
+        "--chain", "/genesis/genesis.json",
+        "--datadir", "/data",
+        "--http",
+        "--http.addr", "0.0.0.0",
+        "--http.port", str(StaticPorts.RETH_HTTP),
+        "--http.api", "all",
+        "--http.corsdomain", "*",
+        "--ws",
+        "--ws.addr", "0.0.0.0",
+        "--ws.port", str(StaticPorts.RETH_WS),
+        "--ws.api", "eth,net,web3,debug,trace,txpool",
+        "--authrpc.addr", "0.0.0.0",
+        "--authrpc.port", str(StaticPorts.RETH_AUTH),
+        "--authrpc.jwtsecret", "/genesis/jwt.hex",
+        "--metrics", f"0.0.0.0:{StaticPorts.RETH_METRICS}",
+        "--log.stdout.format", "terminal",
+        "--log.file.directory", "/data/logs",
+        "--full",
+        "--ipcpath", "/data/reth.ipc",
+        "--engine.persistence-threshold", "0",
+        "--engine.memory-block-buffer-target", "0",
+        "--db.exclusive", "false",
+    ]
 
-    @property
-    def name(self) -> str:
-        return "reth"
-
-    def get_container_config(self) -> ContainerConfig:
-        # Ensure data directories exist
-        self._data_path.mkdir(parents=True, exist_ok=True)
-
-        jwt_path = self._artifacts_path / "jwt.hex"
-        genesis_path = self._artifacts_path / "genesis.json"
-
-        command = [
-            "node",
-            "--chain", "/genesis/genesis.json",
-            "--datadir", "/data",
-            "--http",
-            "--http.addr", "0.0.0.0",
-            "--http.port", str(StaticPorts.RETH_HTTP),
-            "--http.api", "all",
-            "--http.corsdomain", "*",
-            "--ws",
-            "--ws.addr", "0.0.0.0",
-            "--ws.port", str(StaticPorts.RETH_WS),
-            "--ws.api", "eth,net,web3,debug,trace,txpool",
-            "--authrpc.addr", "0.0.0.0",
-            "--authrpc.port", str(StaticPorts.RETH_AUTH),
-            "--authrpc.jwtsecret", "/genesis/jwt.hex",
-            "--metrics", f"0.0.0.0:{StaticPorts.RETH_METRICS}",
-            "--log.stdout.format", "terminal",
-            "--log.file.directory", "/data/logs",  # Ensure logs go to writable directory
-            "--full",
-            "--ipcpath", "/data/reth.ipc",  # IPC socket for rbuilder integration
-            # Required for proper engine API payload building
-            "--engine.persistence-threshold", "0",
-            "--engine.memory-block-buffer-target", "0",
-            # Allow rbuilder to share database access
-            "--db.exclusive", "false",
-        ]
-
-        return ContainerConfig(
-            name=self.name,
-            image=self.config.execution.image,
-            static_ip=StaticIPs.RETH,
-            command=command,
-            ports={
-                StaticPorts.RETH_HTTP: StaticPorts.RETH_HTTP,
-                StaticPorts.RETH_WS: StaticPorts.RETH_WS,
-                StaticPorts.RETH_AUTH: StaticPorts.RETH_AUTH,
-            },
-            mounts=[
-                Mount(
-                    target="/data",
-                    source=str(self._data_path),
-                    type="bind",
-                ),
-                Mount(
-                    target="/genesis",
-                    source=str(self._artifacts_path),
-                    type="bind",
-                    read_only=True,
-                ),
+    return (
+        Service("reth")
+        .with_image(DEFAULT_IMAGE)
+        .with_static_ip(StaticIPs.RETH)
+        .with_command(*command)
+        .with_port(StaticPorts.RETH_HTTP, StaticPorts.RETH_HTTP)
+        .with_port(StaticPorts.RETH_WS, StaticPorts.RETH_WS)
+        .with_port(StaticPorts.RETH_AUTH, StaticPorts.RETH_AUTH)
+        .with_mount("/data", str(data_path))
+        .with_mount("/genesis", str(artifacts_path), read_only=True)
+        .with_healthcheck(
+            test=[
+                "CMD-SHELL",
+                f"bash -c 'echo >/dev/tcp/localhost/{StaticPorts.RETH_HTTP}' 2>/dev/null || exit 1",
             ],
-            healthcheck={
-                "test": [
-                    "CMD-SHELL",
-                    # Use bash explicitly for /dev/tcp support
-                    f"bash -c 'echo >/dev/tcp/localhost/{StaticPorts.RETH_HTTP}' 2>/dev/null || exit 1",
-                ],
-                "interval": 5000000000,  # 5s in nanoseconds
-                "timeout": 3000000000,  # 3s
-                "retries": 10,
-                "start_period": 10000000000,  # 10s
-            },
+            interval=5000000000,
+            timeout=3000000000,
+            retries=10,
+            start_period=10000000000,
         )
-
-    @property
-    def http_url(self) -> str:
-        return f"http://{StaticIPs.RETH}:{StaticPorts.RETH_HTTP}"
-
-    @property
-    def ws_url(self) -> str:
-        return f"ws://{StaticIPs.RETH}:{StaticPorts.RETH_WS}"
-
-    @property
-    def auth_url(self) -> str:
-        return f"http://{StaticIPs.RETH}:{StaticPorts.RETH_AUTH}"
-
-    @property
-    def data_path(self) -> Path:
-        """Path to Reth data directory on host."""
-        return self._data_path
+    )

@@ -1,116 +1,87 @@
-"""Dora the Explorer block explorer component."""
+"""Dora the Explorer block explorer service."""
 
 from pathlib import Path
-from docker.types import Mount
+from textwrap import dedent
 
-from mev_playground.components.base import Component, ContainerConfig
+from mev_playground.service import Service
 from mev_playground.config import StaticIPs, StaticPorts
 
 
-# Dora default HTTP port
 DORA_PORT = 8080
 
 
-class DoraComponent(Component):
-    """Dora the Explorer - lightweight beaconchain explorer."""
+def _generate_dora_config() -> str:
+    """Generate Dora configuration YAML."""
+    return dedent(f"""\
+        logging:
+          outputLevel: "info"
 
-    def __init__(self, data_dir: Path):
-        super().__init__(data_dir)
-        self._config_path = data_dir / "config" / "dora"
+        chain:
+          displayName: "MEV Playground Devnet"
 
-    @property
-    def name(self) -> str:
-        return "dora"
+        server:
+          host: "0.0.0.0"
+          port: "{DORA_PORT}"
 
-    def _generate_config(self) -> str:
-        """Generate Dora configuration YAML."""
-        return f"""logging:
-  outputLevel: "info"
+        frontend:
+          enabled: true
+          siteName: "MEV Playground Explorer"
+          siteSubtitle: "Local Devnet"
+          ethExplorerLink: ""
 
-chain:
-  displayName: "MEV Playground Devnet"
+        beaconapi:
+          endpoints:
+            - name: "lighthouse"
+              url: "http://{StaticIPs.LIGHTHOUSE_BN}:{StaticPorts.LIGHTHOUSE_HTTP}"
+          localCacheSize: 100
 
-server:
-  host: "0.0.0.0"
-  port: "{DORA_PORT}"
+        executionapi:
+          endpoints:
+            - name: "reth"
+              url: "http://{StaticIPs.RETH}:{StaticPorts.RETH_HTTP}"
+          depositDeployBlock: 0
 
-frontend:
-  enabled: true
-  siteName: "MEV Playground Explorer"
-  siteSubtitle: "Local Devnet"
-  ethExplorerLink: ""
+        indexer:
+          inMemoryEpochs: 3
+          activityHistoryLength: 6
+          disableSynchronizer: false
+          syncEpochCooldown: 1
+          maxParallelValidatorSetRequests: 1
 
-beaconapi:
-  endpoints:
-    - name: "lighthouse"
-      url: "http://{StaticIPs.LIGHTHOUSE_BN}:{StaticPorts.LIGHTHOUSE_HTTP}"
-  localCacheSize: 100
+        database:
+          engine: "sqlite"
+          sqlite:
+            file: "/data/dora.sqlite"
+    """)
 
-executionapi:
-  endpoints:
-    - name: "reth"
-      url: "http://{StaticIPs.RETH}:{StaticPorts.RETH_HTTP}"
-  depositDeployBlock: 0
 
-indexer:
-  inMemoryEpochs: 3
-  activityHistoryLength: 6
-  disableSynchronizer: false
-  syncEpochCooldown: 1
-  maxParallelValidatorSetRequests: 1
+def dora_service(data_dir: Path) -> Service:
+    """Create a Dora block explorer service."""
+    config_path = data_dir / "config" / "dora"
+    data_path = data_dir / "data" / "dora"
+    config_path.mkdir(parents=True, exist_ok=True)
+    data_path.mkdir(parents=True, exist_ok=True)
 
-database:
-  engine: "sqlite"
-  sqlite:
-    file: "/data/dora.sqlite"
-"""
+    config_file = config_path / "config.yaml"
+    config_file.write_text(_generate_dora_config())
 
-    def get_container_config(self) -> ContainerConfig:
-        # Ensure config directory exists and write config
-        self._config_path.mkdir(parents=True, exist_ok=True)
-        config_file = self._config_path / "config.yaml"
-        config_file.write_text(self._generate_config())
-
-        # Data directory for sqlite
-        data_path = self.data_dir / "data" / "dora"
-        data_path.mkdir(parents=True, exist_ok=True)
-
-        return ContainerConfig(
-            name=self.name,
-            image="pk910/dora-the-explorer:latest",
-            static_ip=StaticIPs.DORA,
-            command=[
-                "-config", "/config/config.yaml",
+    return (
+        Service("dora")
+        .with_image("pk910/dora-the-explorer:latest")
+        .with_static_ip(StaticIPs.DORA)
+        .with_command("-config", "/config/config.yaml")
+        .with_port(DORA_PORT, DORA_PORT)
+        .with_mount("/config", str(config_path), read_only=True)
+        .with_mount("/data", str(data_path))
+        .with_healthcheck(
+            test=[
+                "CMD-SHELL",
+                f"bash -c 'echo >/dev/tcp/localhost/{DORA_PORT}' 2>/dev/null || exit 1",
             ],
-            ports={
-                DORA_PORT: DORA_PORT,
-            },
-            mounts=[
-                Mount(
-                    target="/config",
-                    source=str(self._config_path),
-                    type="bind",
-                    read_only=True,
-                ),
-                Mount(
-                    target="/data",
-                    source=str(data_path),
-                    type="bind",
-                ),
-            ],
-            healthcheck={
-                "test": [
-                    "CMD-SHELL",
-                    f"bash -c 'echo >/dev/tcp/localhost/{DORA_PORT}' 2>/dev/null || exit 1",
-                ],
-                "interval": 5000000000,  # 5 seconds
-                "timeout": 3000000000,   # 3 seconds
-                "retries": 10,
-                "start_period": 10000000000,  # 10 seconds
-            },
-            depends_on=["lighthouse-bn", "reth"],
+            interval=5000000000,
+            timeout=3000000000,
+            retries=10,
+            start_period=10000000000,
         )
-
-    @property
-    def url(self) -> str:
-        return f"http://localhost:{DORA_PORT}"
+        .with_depends_on("lighthouse-bn", "reth")
+    )

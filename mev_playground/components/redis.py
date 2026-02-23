@@ -1,38 +1,21 @@
-"""Redis component for relay caching."""
+"""Redis service for relay caching."""
 
-from pathlib import Path
-
-from mev_playground.components.base import Component, ContainerConfig
-from mev_playground.config import StaticIPs, StaticPorts
+from mev_playground.service import Service
+from mev_playground.config import StaticIPs
 
 
-class RedisComponent(Component):
-    """Redis cache for the relay."""
-
-    def __init__(self, data_dir: Path):
-        super().__init__(data_dir)
-
-    @property
-    def name(self) -> str:
-        return "redis"
-
-    def get_container_config(self) -> ContainerConfig:
-        return ContainerConfig(
-            name=self.name,
-            image="redis:7-alpine",
-            static_ip=StaticIPs.REDIS,
-            command=["redis-server", "--appendonly", "no", "--save", ""],
-            # No host port binding - only accessible within Docker network
-            ports={},
-            healthcheck={
-                "test": ["CMD", "redis-cli", "ping"],
-                "interval": 3000000000,
-                "timeout": 2000000000,
-                "retries": 5,
-                "start_period": 3000000000,
-            },
+def redis_service() -> Service:
+    """Create a Redis cache service for the relay."""
+    return (
+        Service("redis")
+        .with_image("redis:7-alpine")
+        .with_static_ip(StaticIPs.REDIS)
+        .with_command("redis-server", "--appendonly", "no", "--save", "")
+        .with_healthcheck(
+            test=["CMD", "redis-cli", "ping"],
+            interval=3000000000,
+            timeout=2000000000,
+            retries=5,
+            start_period=3000000000,
         )
-
-    @property
-    def url(self) -> str:
-        return f"{StaticIPs.REDIS}:{StaticPorts.REDIS}"
+    )

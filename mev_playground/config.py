@@ -1,9 +1,8 @@
-"""Configuration models for MEV Playground."""
+"""Configuration for MEV Playground."""
 
 import platform
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
-from pydantic import BaseModel, Field
 
 
 def get_rbuilder_image() -> str:
@@ -85,104 +84,15 @@ DEFAULT_MEV_SECRET_KEY = "0x607a11b45a7219cc61a3d9c5fd08c7eebd602a6a19a977f8d377
 DEFAULT_DATA_DIR = Path.home() / ".mev_playground"
 
 
-class NetworkConfig(BaseModel):
-    """Network configuration."""
+@dataclass
+class PlaygroundConfig:
+    """Playground configuration (CLI-overridable fields only)."""
 
-    chain_id: int = 3151908  # Kurtosis default chain ID
-    seconds_per_slot: int = 12
-    slots_per_epoch: int = 32
-    genesis_delay: int = 0  # Seconds from now until genesis
-
-    # Beacon chain preset
-    preset: str = "mainnet"
-
-    # Validator mnemonic (BIP39) - used for deterministic key generation
-    # Default is the Kurtosis mnemonic for reproducible testing
-    mnemonic: str = DEFAULT_MNEMONIC
-
-    # Fork epochs (0 = enabled at genesis, FAR_FUTURE_EPOCH = disabled)
-    electra_fork_epoch: int = 0  # Enable Electra at genesis
-    fulu_fork_epoch: int = FAR_FUTURE_EPOCH  # Disable Fulu by default
-
-    # Genesis generator Docker image
-    genesis_generator_image: str = "ethpandaops/ethereum-genesis-generator:5.2.0"
-
-
-class ExecutionConfig(BaseModel):
-    """Execution client configuration."""
-
-    image: str = "ghcr.io/paradigmxyz/reth:v1.8.2"
-
-
-class ConsensusConfig(BaseModel):
-    """Consensus client configuration."""
-
-    image: str = "sigp/lighthouse:v8.0.0-rc.2"  # Electra support
-
-
-class ValidatorConfig(BaseModel):
-    """Validator configuration."""
-
-    count: int = 100  # Matches pre-generated fixtures from builder-playground
-
-
-class RelayConfig(BaseModel):
-    """Relay configuration."""
-
-    image: str = "turbo-relay-combined:latest"
-    extra_env: dict[str, str] = Field(default_factory=dict)
-
-
-class BuilderConfig(BaseModel):
-    """Builder configuration."""
-
-    enabled: bool = True  # Enabled by default with rbuilder
-    type: str = "rbuilder"  # or "custom" or "none"
-    image: str = Field(default_factory=get_rbuilder_image)
-    extra_env: dict[str, str] = Field(default_factory=dict)
-
-
-class MEVBoostConfig(BaseModel):
-    """MEV-Boost configuration."""
-
-    image: str = "flashbots/mev-boost:latest"
-
-
-class ContenderConfig(BaseModel):
-    """Contender transaction spammer configuration."""
-
-    image: str = "flashbots/contender:latest"
-    tps: int = 20  # Transactions per second
-    extra_args: list[str] = Field(default_factory=list)
-
-
-class MEVConfig(BaseModel):
-    """MEV stack configuration."""
-
-    relay: RelayConfig = Field(default_factory=RelayConfig)
-    builder: BuilderConfig = Field(default_factory=BuilderConfig)
-    boost: MEVBoostConfig = Field(default_factory=MEVBoostConfig)
-
-
-class PlaygroundConfig(BaseModel):
-    """Complete playground configuration."""
-
-    network: NetworkConfig = Field(default_factory=NetworkConfig)
-    execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
-    consensus: ConsensusConfig = Field(default_factory=ConsensusConfig)
-    validators: ValidatorConfig = Field(default_factory=ValidatorConfig)
-    mev: MEVConfig = Field(default_factory=MEVConfig)
-    contender: ContenderConfig = Field(default_factory=ContenderConfig)
     data_dir: Path = DEFAULT_DATA_DIR
+    relay_image: str = "turbo-relay-combined:latest"
+    builder_enabled: bool = True
+    builder_image: str = field(default_factory=get_rbuilder_image)
 
     @property
     def artifacts_dir(self) -> Path:
         return self.data_dir / "artifacts"
-
-    @property
-    def chain_data_dir(self) -> Path:
-        return self.data_dir / "data"
-
-    @property
-    def config_dir(self) -> Path:
-        return self.data_dir / "config"
