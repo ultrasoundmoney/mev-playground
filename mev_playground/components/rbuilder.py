@@ -8,6 +8,7 @@ from mev_playground.config import (
     StaticIPs,
     StaticPorts,
     DEFAULT_MEV_SECRET_KEY,
+    BUILDER_1_PRIVATE_KEY,
 )
 
 
@@ -64,7 +65,7 @@ def rbuilder_service(
     data_dir: Path,
     image: str,
     reth_data_path: Path,
-    coinbase_secret_key: str = "0x" + "01" * 32,
+    coinbase_secret_key: str = BUILDER_1_PRIVATE_KEY,
 ) -> Service:
     """Create an rbuilder block builder service."""
     config_path = data_dir / "config" / "rbuilder.toml"

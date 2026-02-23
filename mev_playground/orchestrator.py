@@ -55,6 +55,7 @@ class Playground:
     def __init__(
         self,
         data_dir: Optional[Path] = None,
+        execution_image: Optional[str] = None,
         relay_image: Optional[str] = None,
         builder: str = "rbuilder",
         builder_image: Optional[str] = None,
@@ -65,12 +66,14 @@ class Playground:
 
         Args:
             data_dir: Override data directory
+            execution_image: Override execution client image
             relay_image: Override relay image
             builder: Builder type ("rbuilder", "custom", or "none")
             builder_image: Custom builder image (if builder="custom")
             with_contender: Start Contender tx spammer with the playground
             contender_tps: Contender transactions per second
         """
+        self.execution_image = execution_image
         self.config = PlaygroundConfig(
             data_dir=data_dir or DEFAULT_DATA_DIR,
             relay_image=relay_image or "turbo-relay-combined:latest",
@@ -169,7 +172,7 @@ class Playground:
     def _collect_images(self) -> list[str]:
         """Collect all Docker images that need to be pulled."""
         images = [
-            RETH_IMAGE,
+            self.execution_image or RETH_IMAGE,
             LIGHTHOUSE_IMAGE,
             MEV_BOOST_IMAGE,
             "pk910/dora-the-explorer:latest",
@@ -193,7 +196,10 @@ class Playground:
         genesis_validators_root = get_genesis_validators_root_from_dir(beacon_dir)
 
         # Core Ethereum stack
-        self._components["reth"] = reth_service(data_dir)
+        reth_kwargs = {"data_dir": data_dir}
+        if self.execution_image:
+            reth_kwargs["image"] = self.execution_image
+        self._components["reth"] = reth_service(**reth_kwargs)
         self._components["lighthouse-bn"] = lighthouse_beacon_service(
             data_dir, enable_mev_boost=True
         )

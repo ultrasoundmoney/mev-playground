@@ -47,6 +47,11 @@ def main(ctx, debug):
 
 @main.command()
 @click.option(
+    "--execution-image",
+    default=None,
+    help="Override execution client Docker image (default: reth-simulator:latest)",
+)
+@click.option(
     "--relay-image",
     default=None,
     help="Override relay Docker image",
@@ -78,10 +83,11 @@ def main(ctx, debug):
     default=20,
     help="Contender transactions per second (default: 20)",
 )
-def start(relay_image, builder, builder_image, data_dir, no_contender, tps):
+def start(execution_image, relay_image, builder, builder_image, data_dir, no_contender, tps):
     """Start the MEV playground."""
     try:
         playground = Playground(
+            execution_image=execution_image,
             relay_image=relay_image,
             builder=builder,
             builder_image=builder_image,
