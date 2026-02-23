@@ -64,6 +64,7 @@ def relay_service(
         "FF_ENABLE_DEHYDRATED_SUBMISSIONS": "false",
         "FF_PRIMEV_ENABLED": "false",
         "FF_PRIMEV_ENFORCE": "false",
+        "FF_ENABLE_BLOCK_MERGING": "true",
 
         # Network config
         "NETWORK": "custom",
