@@ -53,7 +53,6 @@ def relay_service(
         "X_TIMEOUT_HEADER_CORRECTION": "1500",  # Respond 1.5s before timeout to ensure delivery
         "ADJUSTMENT_LOOKBACK_MS": "50",
         "ADJUSTMENT_MIN_DELTA": "0",
-        "SKIP_SIMULATION": "true",
         "DISABLE_BLOCK_SIMULATION": "true",
         "FORCE_FAST_START": "true",  # Required for fast start up
 
@@ -64,6 +63,7 @@ def relay_service(
         "FF_ENABLE_DEHYDRATED_SUBMISSIONS": "false",
         "FF_PRIMEV_ENABLED": "false",
         "FF_PRIMEV_ENFORCE": "false",
+        "FF_ENABLE_BLOCK_MERGING": "true",
 
         # Network config
         "NETWORK": "custom",

@@ -8,16 +8,17 @@ from mev_playground.config import (
     StaticIPs,
     StaticPorts,
     DEFAULT_MEV_SECRET_KEY,
+    BUILDER_1_PRIVATE_KEY,
 )
 
 
-def _generate_rbuilder_config(coinbase_secret_key: str) -> str:
+def _generate_rbuilder_config(coinbase_secret_key: str, relay_secret_key: str) -> str:
     """Generate rbuilder TOML configuration."""
     # Strip 0x prefix from keys if present (rbuilder expects raw hex)
     coinbase_key = coinbase_secret_key
     if coinbase_key.startswith("0x"):
         coinbase_key = coinbase_key[2:]
-    relay_key = DEFAULT_MEV_SECRET_KEY
+    relay_key = relay_secret_key
     if relay_key.startswith("0x"):
         relay_key = relay_key[2:]
 
@@ -64,28 +65,35 @@ def rbuilder_service(
     data_dir: Path,
     image: str,
     reth_data_path: Path,
-    coinbase_secret_key: str = "0x" + "01" * 32,
+    coinbase_secret_key: str = BUILDER_1_PRIVATE_KEY,
+    relay_secret_key: str = DEFAULT_MEV_SECRET_KEY,
+    name: str = "rbuilder",
+    static_ip: str = StaticIPs.RBUILDER,
+    host_rpc_port: int = StaticPorts.RBUILDER_RPC,
+    host_telemetry_port: int = 6060,
+    config_subdir: str = "rbuilder",
 ) -> Service:
     """Create an rbuilder block builder service."""
-    config_path = data_dir / "config" / "rbuilder.toml"
+    config_dir = data_dir / "config" / config_subdir
+    config_path = config_dir / "rbuilder.toml"
     artifacts_path = data_dir / "artifacts"
 
     # Write config file
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(_generate_rbuilder_config(coinbase_secret_key))
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_generate_rbuilder_config(coinbase_secret_key, relay_secret_key))
 
     return (
-        Service("rbuilder")
+        Service(name)
         .with_image(image)
-        .with_static_ip(StaticIPs.RBUILDER)
+        .with_static_ip(static_ip)
         .with_command("run", "/config/rbuilder.toml")
         .with_env(
             COINBASE_SECRET_KEY=coinbase_secret_key,
-            RELAY_SECRET_KEY=DEFAULT_MEV_SECRET_KEY,
+            RELAY_SECRET_KEY=relay_secret_key,
         )
-        .with_port(StaticPorts.RBUILDER_RPC, StaticPorts.RBUILDER_RPC)
-        .with_port(6060, 6060)
-        .with_mount("/config", str(config_path.parent.resolve()), read_only=True)
+        .with_port(StaticPorts.RBUILDER_RPC, host_rpc_port)
+        .with_port(6060, host_telemetry_port)
+        .with_mount("/config", str(config_dir.resolve()), read_only=True)
         .with_mount("/reth_data", str(reth_data_path.resolve()))
         .with_mount("/genesis", str(artifacts_path.resolve()), read_only=True)
         .with_healthcheck(

@@ -12,6 +12,12 @@ from mev_playground.config import (
     DEFAULT_DATA_DIR,
     DEFAULT_MNEMONIC,
     FAR_FUTURE_EPOCH,
+    StaticIPs,
+    StaticPorts,
+    BUILDER_2_PRIVATE_KEY,
+    BUILDER_2_MEV_SECRET_KEY,
+    CONTENDER_1_PRIVATE_KEY,
+    CONTENDER_2_PRIVATE_KEY,
     get_rbuilder_image,
 )
 from mev_playground.docker.controller import DockerController
@@ -40,6 +46,8 @@ from mev_playground.components.rbuilder import rbuilder_service
 from mev_playground.components.dora import dora_service
 from mev_playground.components.contender import contender_service
 from mev_playground.components.contender import DEFAULT_IMAGE as CONTENDER_IMAGE
+from mev_playground.components.rpc_proxy import rpc_proxy_service
+from mev_playground.components.rpc_proxy import DEFAULT_IMAGE as RPC_PROXY_IMAGE
 
 
 console = Console()
@@ -55,9 +63,11 @@ class Playground:
     def __init__(
         self,
         data_dir: Optional[Path] = None,
+        execution_image: Optional[str] = None,
         relay_image: Optional[str] = None,
         builder: str = "rbuilder",
         builder_image: Optional[str] = None,
+        with_builder2: bool = False,
         with_contender: bool = False,
         contender_tps: int = 20,
     ):
@@ -65,12 +75,15 @@ class Playground:
 
         Args:
             data_dir: Override data directory
+            execution_image: Override execution client image
             relay_image: Override relay image
             builder: Builder type ("rbuilder", "custom", or "none")
             builder_image: Custom builder image (if builder="custom")
+            with_builder2: Start a second builder with a different coinbase key
             with_contender: Start Contender tx spammer with the playground
             contender_tps: Contender transactions per second
         """
+        self.execution_image = execution_image
         self.config = PlaygroundConfig(
             data_dir=data_dir or DEFAULT_DATA_DIR,
             relay_image=relay_image or "turbo-relay-combined:latest",
@@ -79,6 +92,7 @@ class Playground:
                 builder_image if builder == "custom" and builder_image
                 else get_rbuilder_image()
             ),
+            builder2_enabled=with_builder2 and builder != "none",
         )
         self.with_contender = with_contender
         self.contender_tps = contender_tps
@@ -166,10 +180,23 @@ class Playground:
         # Copy JWT to beacon dir for Lighthouse
         shutil.copy(jwt_path, beacon_dir / "jwt.hex")
 
+    def _ensure_contender_scenario(self) -> str:
+        """Write the bundle scenario TOML for Contender and return the directory path."""
+        scenario_dir = self.config.data_dir / "config" / "contender"
+        scenario_dir.mkdir(parents=True, exist_ok=True)
+        scenario_path = scenario_dir / "bundles.toml"
+        scenario_path.write_text(
+            '[[spam]]\n'
+            '[[spam.bundle.tx]]\n'
+            'to = "0x0000000000000000000000000000000000000000"\n'
+            'value = "0.001 ether"\n'
+        )
+        return str(scenario_dir.resolve())
+
     def _collect_images(self) -> list[str]:
         """Collect all Docker images that need to be pulled."""
         images = [
-            RETH_IMAGE,
+            self.execution_image or RETH_IMAGE,
             LIGHTHOUSE_IMAGE,
             MEV_BOOST_IMAGE,
             "pk910/dora-the-explorer:latest",
@@ -181,6 +208,7 @@ class Playground:
             images.append(self.config.builder_image)
         if self.with_contender:
             images.append(CONTENDER_IMAGE)
+            images.append(RPC_PROXY_IMAGE)
         return images
 
     def _create_components(self) -> None:
@@ -193,7 +221,10 @@ class Playground:
         genesis_validators_root = get_genesis_validators_root_from_dir(beacon_dir)
 
         # Core Ethereum stack
-        self._components["reth"] = reth_service(data_dir)
+        reth_kwargs = {"data_dir": data_dir}
+        if self.execution_image:
+            reth_kwargs["image"] = self.execution_image
+        self._components["reth"] = reth_service(**reth_kwargs)
         self._components["lighthouse-bn"] = lighthouse_beacon_service(
             data_dir, enable_mev_boost=True
         )
@@ -217,20 +248,65 @@ class Playground:
             genesis_validators_root,
         )
 
-        # Builder
+        # Builders
+        reth_data_path = data_dir / "data" / "reth"
         if self.config.builder_enabled:
-            reth_data_path = data_dir / "data" / "reth"
             self._components["rbuilder"] = rbuilder_service(
                 data_dir,
                 image=self.config.builder_image,
                 reth_data_path=reth_data_path,
             )
 
-        # Contender tx spammer
-        if self.with_contender:
+        if self.config.builder2_enabled:
+            self._components["rbuilder2"] = rbuilder_service(
+                data_dir,
+                image=self.config.builder_image,
+                reth_data_path=reth_data_path,
+                coinbase_secret_key=BUILDER_2_PRIVATE_KEY,
+                relay_secret_key=BUILDER_2_MEV_SECRET_KEY,
+                name="rbuilder2",
+                static_ip=StaticIPs.RBUILDER_2,
+                host_rpc_port=StaticPorts.RBUILDER_2_RPC,
+                host_telemetry_port=StaticPorts.RBUILDER_2_TELEMETRY,
+                config_subdir="rbuilder2",
+            )
+
+        # RPC proxies + Contender tx spammer
+        # Proxies route eth_sendBundle/eth_sendRawTransaction to rbuilder,
+        # and all other RPC methods (e.g. eth_chainId) to Reth.
+        if self.with_contender and self.config.builder_enabled:
+            scenario_dir = self._ensure_contender_scenario()
+
+            # Proxy 1 → rbuilder
+            builder1_rpc = f"http://{StaticIPs.RBUILDER}:{StaticPorts.RBUILDER_RPC}"
+            self._components["rpc-proxy-1"] = rpc_proxy_service(
+                builder_url=builder1_rpc,
+            )
+            proxy1_url = f"http://{StaticIPs.RPC_PROXY_1}:{StaticPorts.RPC_PROXY}"
             self._components["contender"] = contender_service(
+                builder_url=proxy1_url,
+                private_key=CONTENDER_1_PRIVATE_KEY,
+                scenario_dir=scenario_dir,
                 tps=self.contender_tps,
             )
+
+            if self.config.builder2_enabled:
+                # Proxy 2 → rbuilder2 (internal port is RBUILDER_RPC, not RBUILDER_2_RPC)
+                builder2_rpc = f"http://{StaticIPs.RBUILDER_2}:{StaticPorts.RBUILDER_RPC}"
+                self._components["rpc-proxy-2"] = rpc_proxy_service(
+                    builder_url=builder2_rpc,
+                    name="rpc-proxy-2",
+                    static_ip=StaticIPs.RPC_PROXY_2,
+                )
+                proxy2_url = f"http://{StaticIPs.RPC_PROXY_2}:{StaticPorts.RPC_PROXY}"
+                self._components["contender2"] = contender_service(
+                    builder_url=proxy2_url,
+                    private_key=CONTENDER_2_PRIVATE_KEY,
+                    scenario_dir=scenario_dir,
+                    tps=self.contender_tps,
+                    name="contender2",
+                    static_ip=StaticIPs.CONTENDER_2,
+                )
 
     def start(self) -> None:
         """Start all playground components."""
@@ -276,9 +352,17 @@ class Playground:
         ]
         if self.config.builder_enabled:
             startup_order.append("rbuilder")
+        if self.config.builder2_enabled:
+            startup_order.append("rbuilder2")
+
+        # RPC proxies (after builders, before contenders)
+        for proxy_name in ["rpc-proxy-1", "rpc-proxy-2"]:
+            if proxy_name in self._components:
+                startup_order.append(proxy_name)
 
         # Clean up any existing containers from previous runs
-        all_containers = startup_order + (["contender"] if self.with_contender else [])
+        contender_containers = [n for n in ["contender", "contender2"] if n in self._components]
+        all_containers = startup_order + contender_containers
         console.print("Cleaning up existing containers...")
         self.controller.cleanup_existing(all_containers)
 
@@ -297,10 +381,11 @@ class Playground:
         console.print("Waiting for services to become healthy...")
         self.controller.wait_for_all_healthy(timeout=180)
 
-        # Start Contender after other services are healthy (it has no healthcheck)
-        if self.with_contender and "contender" in self._components:
-            console.print("  Starting contender...")
-            self._components["contender"].start(self.controller)
+        # Start Contender(s) after other services are healthy (they have no healthcheck)
+        for contender_name in ["contender", "contender2"]:
+            if contender_name in self._components:
+                console.print(f"  Starting {contender_name}...")
+                self._components[contender_name].start(self.controller)
 
         console.print("[bold green]MEV Playground is running![/bold green]")
         self._print_endpoints()
@@ -366,7 +451,9 @@ class Playground:
         console.print(f"  Dora Explorer:    http://localhost:{8080}")
         console.print(f"  Relay:            http://localhost:{80}")
         if "rbuilder" in self._components:
-            console.print(f"  rbuilder RPC:     http://localhost:{8645}")
+            console.print(f"  rbuilder RPC:     http://localhost:{StaticPorts.RBUILDER_RPC}")
+        if "rbuilder2" in self._components:
+            console.print(f"  rbuilder2 RPC:    http://localhost:{StaticPorts.RBUILDER_2_RPC}")
         console.print("")
 
     def start_contender(self, tps: int = 20) -> None:
@@ -383,27 +470,45 @@ class Playground:
         except Exception:
             raise RuntimeError("Playground is not running. Start it first with 'mev-playground start'")
 
-        # Pull image if needed
-        console.print(f"Pulling {CONTENDER_IMAGE}...")
+        # Pull images
+        console.print(f"Pulling images...")
         self.controller.pull_image(CONTENDER_IMAGE)
+        self.controller.pull_image(RPC_PROXY_IMAGE)
 
-        # Create and start contender
-        contender = contender_service(tps=tps)
-
-        # Remove existing contender container if any
+        # Remove existing containers
+        self.controller.remove_container("rpc-proxy-1", force=True)
         self.controller.remove_container("contender", force=True)
 
+        # Start RPC proxy (routes eth_sendBundle to rbuilder, other methods to Reth)
+        builder1_rpc = f"http://{StaticIPs.RBUILDER}:{StaticPorts.RBUILDER_RPC}"
+        proxy = rpc_proxy_service(builder_url=builder1_rpc)
+        console.print("Starting RPC proxy...")
+        proxy.start(self.controller)
+
+        # Start Contender pointing at proxy
+        scenario_dir = self._ensure_contender_scenario()
+        proxy1_url = f"http://{StaticIPs.RPC_PROXY_1}:{StaticPorts.RPC_PROXY}"
+        contender = contender_service(
+            builder_url=proxy1_url,
+            private_key=CONTENDER_1_PRIVATE_KEY,
+            scenario_dir=scenario_dir,
+            tps=tps,
+        )
         console.print(f"Starting Contender with {tps} TPS...")
         contender.start(self.controller)
         console.print("[green]Contender is running![/green]")
 
     def stop_contender(self) -> None:
-        """Stop the Contender container."""
-        container = self.controller.get_container("contender")
-        if container:
-            console.print("Stopping Contender...")
-            self.controller.stop_container("contender")
-            self.controller.remove_container("contender", force=True)
+        """Stop the Contender and RPC proxy containers."""
+        stopped_any = False
+        for name in ["contender", "contender2", "rpc-proxy-1", "rpc-proxy-2"]:
+            container = self.controller.get_container(name)
+            if container:
+                console.print(f"Stopping {name}...")
+                self.controller.stop_container(name)
+                self.controller.remove_container(name, force=True)
+                stopped_any = True
+        if stopped_any:
             console.print("[green]Contender stopped.[/green]")
         else:
             console.print("[yellow]Contender is not running.[/yellow]")
