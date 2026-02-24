@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from mev_playground.service import Service
-from mev_playground.config import StaticIPs, StaticPorts
+from mev_playground.config import StaticIPs, StaticPorts, PROPOSER_FEE_RECIPIENT
 
 DEFAULT_IMAGE = "sigp/lighthouse:v8.0.0-rc.2"
 
@@ -44,7 +44,7 @@ def lighthouse_beacon_service(
         "--port", str(StaticPorts.LIGHTHOUSE_P2P),
         "--always-prepare-payload",
         "--prepare-payload-lookahead", "8000",
-        "--suggested-fee-recipient", "0x0000000000000000000000000000000000000000",
+        "--suggested-fee-recipient", PROPOSER_FEE_RECIPIENT,
     ]
 
     if enable_mev_boost:
@@ -97,7 +97,7 @@ def lighthouse_validator_service(data_dir: Path) -> Service:
         "--http-allow-origin", "*",
         "--unencrypted-http-transport",
         "--graffiti", "mev-playground",
-        "--suggested-fee-recipient", "0x0000000000000000000000000000000000000000",
+        "--suggested-fee-recipient", PROPOSER_FEE_RECIPIENT,
         "--builder-proposals",
         "--prefer-builder-proposals",
     ]

@@ -51,6 +51,7 @@ def reth_service(data_dir: Path, image: str = DEFAULT_IMAGE) -> Service:
         "--engine.memory-block-buffer-target", "0",
         "--db.exclusive", "false",
         # Block merging extension flags (reth-simulator)
+        "--enable-ext",
         "--builder-collateral-map-path", "/config/builder-collateral-map.json",
         "--relay-fee-recipient", RELAY_FEE_RECIPIENT,
         "--disperse-address", DISPERSE_CONTRACT_ADDRESS,

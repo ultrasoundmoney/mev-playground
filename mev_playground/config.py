@@ -35,6 +35,10 @@ class StaticIPs:
     RBUILDER = "172.28.3.1"
     RBUILDER_2 = "172.28.3.2"
 
+    # RPC proxies (route contender requests to rbuilder + Reth)
+    RPC_PROXY_1 = "172.28.5.1"
+    RPC_PROXY_2 = "172.28.5.2"
+
     # Tools
     DORA = "172.28.4.1"
     CONTENDER = "172.28.4.2"
@@ -59,6 +63,7 @@ class StaticPorts:
     RBUILDER_RPC = 8645
     RBUILDER_2_RPC = 8646
     RBUILDER_2_TELEMETRY = 6061
+    RPC_PROXY = 8650
 
 
 # Network configuration
@@ -99,6 +104,9 @@ BUILDER_2_COLLATERAL_KEY = "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8
 
 # Block merging relay fee recipient (Foundry/Hardhat test account 2)
 RELAY_FEE_RECIPIENT = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+
+# Proposer fee recipient for validator registrations (Foundry/Hardhat test account 9)
+PROPOSER_FEE_RECIPIENT = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
 
 # Contender signing keys (Foundry/Hardhat test accounts 3 and 4)
 CONTENDER_1_PRIVATE_KEY = "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"
