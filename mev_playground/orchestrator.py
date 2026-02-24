@@ -12,6 +12,10 @@ from mev_playground.config import (
     DEFAULT_DATA_DIR,
     DEFAULT_MNEMONIC,
     FAR_FUTURE_EPOCH,
+    StaticIPs,
+    StaticPorts,
+    BUILDER_2_PRIVATE_KEY,
+    BUILDER_2_MEV_SECRET_KEY,
     get_rbuilder_image,
 )
 from mev_playground.docker.controller import DockerController
@@ -59,6 +63,7 @@ class Playground:
         relay_image: Optional[str] = None,
         builder: str = "rbuilder",
         builder_image: Optional[str] = None,
+        with_builder2: bool = False,
         with_contender: bool = False,
         contender_tps: int = 20,
     ):
@@ -70,6 +75,7 @@ class Playground:
             relay_image: Override relay image
             builder: Builder type ("rbuilder", "custom", or "none")
             builder_image: Custom builder image (if builder="custom")
+            with_builder2: Start a second builder with a different coinbase key
             with_contender: Start Contender tx spammer with the playground
             contender_tps: Contender transactions per second
         """
@@ -82,6 +88,7 @@ class Playground:
                 builder_image if builder == "custom" and builder_image
                 else get_rbuilder_image()
             ),
+            builder2_enabled=with_builder2 and builder != "none",
         )
         self.with_contender = with_contender
         self.contender_tps = contender_tps
@@ -223,16 +230,30 @@ class Playground:
             genesis_validators_root,
         )
 
-        # Builder
+        # Builders
+        reth_data_path = data_dir / "data" / "reth"
         if self.config.builder_enabled:
-            reth_data_path = data_dir / "data" / "reth"
             self._components["rbuilder"] = rbuilder_service(
                 data_dir,
                 image=self.config.builder_image,
                 reth_data_path=reth_data_path,
             )
 
-        # Contender tx spammer
+        if self.config.builder2_enabled:
+            self._components["rbuilder2"] = rbuilder_service(
+                data_dir,
+                image=self.config.builder_image,
+                reth_data_path=reth_data_path,
+                coinbase_secret_key=BUILDER_2_PRIVATE_KEY,
+                relay_secret_key=BUILDER_2_MEV_SECRET_KEY,
+                name="rbuilder2",
+                static_ip=StaticIPs.RBUILDER_2,
+                host_rpc_port=StaticPorts.RBUILDER_2_RPC,
+                host_telemetry_port=StaticPorts.RBUILDER_2_TELEMETRY,
+                config_subdir="rbuilder2",
+            )
+
+        # Contender tx spammer (sends transfers to Reth's mempool)
         if self.with_contender:
             self._components["contender"] = contender_service(
                 tps=self.contender_tps,
@@ -282,9 +303,12 @@ class Playground:
         ]
         if self.config.builder_enabled:
             startup_order.append("rbuilder")
+        if self.config.builder2_enabled:
+            startup_order.append("rbuilder2")
 
         # Clean up any existing containers from previous runs
-        all_containers = startup_order + (["contender"] if self.with_contender else [])
+        contender_containers = ["contender"] if self.with_contender else []
+        all_containers = startup_order + contender_containers
         console.print("Cleaning up existing containers...")
         self.controller.cleanup_existing(all_containers)
 
@@ -304,7 +328,7 @@ class Playground:
         self.controller.wait_for_all_healthy(timeout=180)
 
         # Start Contender after other services are healthy (it has no healthcheck)
-        if self.with_contender and "contender" in self._components:
+        if "contender" in self._components:
             console.print("  Starting contender...")
             self._components["contender"].start(self.controller)
 
@@ -372,7 +396,9 @@ class Playground:
         console.print(f"  Dora Explorer:    http://localhost:{8080}")
         console.print(f"  Relay:            http://localhost:{80}")
         if "rbuilder" in self._components:
-            console.print(f"  rbuilder RPC:     http://localhost:{8645}")
+            console.print(f"  rbuilder RPC:     http://localhost:{StaticPorts.RBUILDER_RPC}")
+        if "rbuilder2" in self._components:
+            console.print(f"  rbuilder2 RPC:    http://localhost:{StaticPorts.RBUILDER_2_RPC}")
         console.print("")
 
     def start_contender(self, tps: int = 20) -> None:
@@ -393,12 +419,10 @@ class Playground:
         console.print(f"Pulling {CONTENDER_IMAGE}...")
         self.controller.pull_image(CONTENDER_IMAGE)
 
-        # Create and start contender
-        contender = contender_service(tps=tps)
-
         # Remove existing contender container if any
         self.controller.remove_container("contender", force=True)
 
+        contender = contender_service(tps=tps)
         console.print(f"Starting Contender with {tps} TPS...")
         contender.start(self.controller)
         console.print("[green]Contender is running![/green]")

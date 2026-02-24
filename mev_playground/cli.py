@@ -74,6 +74,12 @@ def main(ctx, debug):
     help=f"Data directory (default: {DEFAULT_DATA_DIR})",
 )
 @click.option(
+    "--with-builder2",
+    is_flag=True,
+    default=False,
+    help="Start a second builder with a different coinbase key",
+)
+@click.option(
     "--no-contender",
     is_flag=True,
     help="Skip starting Contender transaction spammer",
@@ -83,7 +89,7 @@ def main(ctx, debug):
     default=20,
     help="Contender transactions per second (default: 20)",
 )
-def start(execution_image, relay_image, builder, builder_image, data_dir, no_contender, tps):
+def start(execution_image, relay_image, builder, builder_image, data_dir, with_builder2, no_contender, tps):
     """Start the MEV playground."""
     try:
         playground = Playground(
@@ -91,6 +97,7 @@ def start(execution_image, relay_image, builder, builder_image, data_dir, no_con
             relay_image=relay_image,
             builder=builder,
             builder_image=builder_image,
+            with_builder2=with_builder2,
             data_dir=data_dir,
             with_contender=not no_contender,
             contender_tps=tps,

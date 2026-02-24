@@ -31,12 +31,14 @@ class StaticIPs:
     LOCALDB = "172.28.2.4"
     GLOBALDB = "172.28.2.5"
 
-    # Builder
+    # Builders
     RBUILDER = "172.28.3.1"
+    RBUILDER_2 = "172.28.3.2"
 
     # Tools
     DORA = "172.28.4.1"
     CONTENDER = "172.28.4.2"
+    CONTENDER_2 = "172.28.4.3"
 
 
 # Static ports
@@ -55,6 +57,8 @@ class StaticPorts:
     REDIS = 6379
     POSTGRES = 5432
     RBUILDER_RPC = 8645
+    RBUILDER_2_RPC = 8646
+    RBUILDER_2_TELEMETRY = 6061
 
 
 # Network configuration
@@ -76,9 +80,14 @@ DEFAULT_MNEMONIC = "giant issue aisle success illegal bike spike question tent b
 # Far future epoch for disabled forks
 FAR_FUTURE_EPOCH = 18446744073709551615
 
-# Default MEV keys
+# Relay public key (used by MEV-Boost to verify relay responses)
 DEFAULT_MEV_PUBKEY = "0xa55c1285d84ba83a5ad26420cd5ad3091e49c55a813eee651cd467db38a8c8e63192f47955e9376f6b42f6d190571cb5"
-DEFAULT_MEV_SECRET_KEY = "0x607a11b45a7219cc61a3d9c5fd08c7eebd602a6a19a977f8d3771d5711a550f2"
+
+# MEV signing keys (used by rbuilder to sign blocks submitted to the relay)
+BUILDER_1_MEV_SECRET_KEY = "0x607a11b45a7219cc61a3d9c5fd08c7eebd602a6a19a977f8d3771d5711a550f2"
+BUILDER_2_MEV_SECRET_KEY = "0x2e0834786285daccd064ca17f1654f67b4aef298acbb82cef9ec422fb4975622"
+# Keep DEFAULT_MEV_SECRET_KEY as alias for backwards compat
+DEFAULT_MEV_SECRET_KEY = BUILDER_1_MEV_SECRET_KEY
 
 # Block merging builder accounts (Foundry/Hardhat test accounts)
 BUILDER_1_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
@@ -90,6 +99,10 @@ BUILDER_2_COLLATERAL_KEY = "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8
 
 # Block merging relay fee recipient (Foundry/Hardhat test account 2)
 RELAY_FEE_RECIPIENT = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+
+# Contender signing keys (Foundry/Hardhat test accounts 3 and 4)
+CONTENDER_1_PRIVATE_KEY = "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"
+CONTENDER_2_PRIVATE_KEY = "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"
 
 # Disperse contract address (same as mainnet deployment from disperse.app)
 DISPERSE_CONTRACT_ADDRESS = "0xD152f549545093347A162Dce210e7293f1452150"
@@ -112,6 +125,7 @@ class PlaygroundConfig:
     relay_image: str = "turbo-relay-combined:latest"
     builder_enabled: bool = True
     builder_image: str = field(default_factory=get_rbuilder_image)
+    builder2_enabled: bool = False
 
     @property
     def artifacts_dir(self) -> Path:
