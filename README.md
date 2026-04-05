@@ -5,7 +5,8 @@ A minimal MEV integration testing environment for Ethereum. Spin up a complete l
 ## Features
 
 - **Complete MEV Stack**: Relay, builder (rbuilder), MEV-Boost, all pre-configured
-- **Full Ethereum Node**: Reth (execution) + Lighthouse (consensus) with 100 validators
+- **Block Merging**: Test block merging with one or two builders submitting to the relay
+- **Full Ethereum Node**: reth-simulator (execution with block merging extensions) + Lighthouse (consensus) with 100 validators
 - **Zero Configuration**: Pre-generated genesis, validator keys, and JWT secrets
 - **Transaction Spamming**: Built-in tools to populate the mempool for testing
 - **Block Explorer**: Dora explorer included for inspecting blocks
@@ -32,6 +33,9 @@ pipx install git+https://github.com/ultrasoundmoney/mev-playground.git
 # Start the playground
 mev-playground start
 
+# Start with two builders for block merging
+mev-playground start --with-builder2
+
 # Check status
 mev-playground status
 
@@ -56,6 +60,7 @@ mev-playground nuke
 | `logs <component>` | View logs from a component |
 | `info` | Show configuration and endpoints |
 | `spam` | Run simple Python transaction spammer |
+| `assert-blocks` | Assert blocks have expected extraData for n slots |
 | `contender start` | Start Contender transaction spammer |
 | `contender stop` | Stop Contender |
 
@@ -63,10 +68,12 @@ mev-playground nuke
 
 ```bash
 mev-playground start \
+  --execution-image IMAGE \         # Override execution client image (default: reth-simulator:latest)
   --builder rbuilder|custom|none \  # Builder type (default: rbuilder)
   --builder-image IMAGE \           # Custom builder Docker image
   --relay-image IMAGE \             # Override relay image
   --data-dir PATH \                 # Custom data directory
+  --with-builder2 \                 # Start a second builder for block merging
   --no-contender \                  # Skip starting transaction spammer
   --tps 20                          # Contender transactions per second
 ```
@@ -74,29 +81,38 @@ mev-playground start \
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        MEV Playground                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────┐    ┌─────────────┐    ┌──────────┐                 │
-│  │  Reth   │◄──►│ Lighthouse  │◄──►│MEV-Boost │                 │
-│  │  (EL)   │    │  BN + VC    │    │          │                 │
-│  └────┬────┘    └─────────────┘    └────┬─────┘                 │
-│       │                                 │                       │
-│       │ IPC                             │                       │
-│       ▼                                 ▼                       │
-│  ┌─────────┐                       ┌─────────┐                  │
-│  │rbuilder │──────────────────────►│  Relay  │                  │
-│  │(builder)│    submits blocks     │         │                  │
-│  └─────────┘                       └─────────┘                  │
-│                                                                 │
-│                                                                 │
-│  ┌─────────┐    ┌───────────┐                                   │
-│  │  Dora   │    │ Contender │                                   │
-│  │(explorer)    │ (spammer) │                                   │
-│  └─────────┘    └───────────┘                                   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                           MEV Playground                                │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌──────────────┐    ┌─────────────┐    ┌──────────┐                     │
+│  │reth-simulator│◄──►│ Lighthouse  │◄──►│MEV-Boost │                     │
+│  │     (EL)     │    │  BN + VC    │    │          │                     │
+│  └──────┬───────┘    └─────────────┘    └────┬─────┘                     │
+│         │                                    │                           │
+│         │ IPC                                │                           │
+│         ▼                                    ▼                           │
+│  ┌──────────┐    submits blocks      ┌───────────┐                       │
+│  │ rbuilder │───────────────────────►│   Relay   │                       │
+│  │(builder 1)│                       │           │                       │
+│  └──────────┘                        │  (merges  │                       │
+│  ┌──────────┐    submits blocks      │  blocks)  │                       │
+│  │ rbuilder2│───────────────────────►│           │                       │
+│  │(builder 2)│  (optional)           └───────────┘                       │
+│  └──────────┘                                                            │
+│         ▲                                                                │
+│         │                                                                │
+│  ┌────────────┐    ┌────────────┐                                        │
+│  │ RPC Proxy 1│    │ RPC Proxy 2│  (route private txs to each builder)   │
+│  └─────┬──────┘    └─────┬──────┘                                        │
+│        ▲                 ▲                                                │
+│        │                 │                                                │
+│  ┌─────┴─────┐    ┌─────┴─────┐    ┌─────────┐                           │
+│  │ Contender │    │Contender 2│    │  Dora   │                           │
+│  │ (spammer) │    │ (spammer) │    │(explorer)│                          │
+│  └───────────┘    └───────────┘    └─────────┘                           │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Endpoints
@@ -109,19 +125,22 @@ mev-playground start \
 | MEV-Boost | 18550 | http://localhost:18550 |
 | Relay | 80 | http://localhost:80 |
 | rbuilder RPC | 8645 | http://localhost:8645 |
+| rbuilder2 RPC | 8646 | http://localhost:8646 |
+| RPC Proxy 1 | 8650 | http://localhost:8650 |
 | Dora Explorer | 8080 | http://localhost:8080 |
 
 ## Components
 
 ### Core Ethereum Stack
-- **Reth** (`ghcr.io/paradigmxyz/reth:v1.8.2`) - Execution client
+- **reth-simulator** (`reth-simulator:latest`) - Execution client with block merging extensions
 - **Lighthouse** (`sigp/lighthouse:v8.0.0-rc.2`) - Consensus client (beacon node + validator client)
 - **100 Validators** - Pre-generated keys from fixtures
 
 ### MEV Stack
-- **Relay** - Ultrasound/Turbo relay for block auction
-- **rbuilder** - Flashbots block builder
+- **Relay** - Ultrasound/Turbo relay for block auction (with block merging support)
+- **rbuilder** - Flashbots block builder (1 or 2 instances)
 - **MEV-Boost** - Validator sidecar for external block building
+- **RPC Proxy** - Routes private transactions (`eth_sendBundle`, `eth_sendRawTransaction`) to the builder, other RPC calls to Reth
 
 ### Infrastructure
 - **PostgreSQL** (3 instances) - Relay databases
@@ -129,14 +148,48 @@ mev-playground start \
 - **Dora** - Block explorer
 - **Contender** - Transaction load generator
 
+## Block Merging
+
+Block merging allows the relay to combine blocks from multiple builders into a single optimal block. The playground supports testing this with one or two builders.
+
+### Single Builder (default)
+
+```bash
+mev-playground start
+```
+
+One builder (`rbuilder`) submits blocks to the relay. The execution client (`reth-simulator`) runs with block merging extensions enabled, including a builder collateral map and relay fee recipient configuration.
+
+### Two Builders
+
+```bash
+mev-playground start --with-builder2
+```
+
+Two builders with different coinbase keys each submit blocks to the relay, which merges them. Each builder gets its own:
+
+- **RPC Proxy** - Routes private transaction flow (`eth_sendBundle`, `eth_sendRawTransaction`) to the assigned builder, while forwarding all other RPC calls to Reth
+- **Contender instance** - Sends bundles through the proxy so each builder receives unique private order flow
+
+This setup simulates the production block merging scenario where the relay merges blocks from competing builders.
+
 ## Python API
 
 ```python
 from mev_playground import Playground
 
-# Create and start
+# Single builder (default)
 playground = Playground(
     builder="rbuilder",
+    with_contender=True,
+    contender_tps=20,
+)
+playground.start()
+
+# Two builders for block merging
+playground = Playground(
+    builder="rbuilder",
+    with_builder2=True,
     with_contender=True,
     contender_tps=20,
 )
@@ -164,7 +217,7 @@ Default data directory: `~/.mev_playground`
 | Chain ID | 3151908 |
 | Seconds per slot | 12 |
 | Validator count | 100 |
-| Genesis delay | 30s |
+| Genesis delay | 0 |
 | Fork | Electra (enabled at genesis) |
 
 ### Genesis Generation
@@ -183,8 +236,9 @@ All containers run on a custom Docker bridge network (`mev-playground`) with sta
 
 - **172.28.1.x** - Core Ethereum (Reth, Lighthouse, MEV-Boost)
 - **172.28.2.x** - Relay infrastructure (Relay, Redis, Postgres)
-- **172.28.3.x** - Builder (rbuilder)
+- **172.28.3.x** - Builders (rbuilder, rbuilder2)
 - **172.28.4.x** - Tools (Dora, Contender)
+- **172.28.5.x** - RPC Proxies
 
 ## Development
 
